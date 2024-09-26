@@ -1,0 +1,235 @@
+******************************************************************************
+                  TI ARM Linker Unix v20.2.7                   
+******************************************************************************
+>> Linked Thu Sep 26 03:36:09 2024
+
+OUTPUT FILE NAME:   <mini_project.out>
+ENTRY POINT SYMBOL: "_c_int00_noinit_noargs"  address: 00001289
+
+
+MEMORY CONFIGURATION
+
+         name            origin    length      used     unused   attr    fill
+----------------------  --------  ---------  --------  --------  ----  --------
+  FLASH                 00000000   00040000  000012ea  0003ed16  R  X
+  SRAM                  20000000   00008000  00000200  00007e00  RW X
+
+
+SEGMENT ALLOCATION MAP
+
+run origin  load origin   length   init length attrs members
+----------  ----------- ---------- ----------- ----- -------
+00000000    00000000    000012ea   000012ea    r-x
+  00000000    00000000    0000026c   0000026c    r-- .intvecs
+  0000026c    0000026c    0000106a   0000106a    r-x .text
+  000012d6    000012d6    00000014   00000014    r-- .const
+20000000    20000000    00000200   00000000    rw-
+  20000000    20000000    00000200   00000000    rw- .stack
+
+
+SECTION ALLOCATION MAP
+
+ output                                  attributes/
+section   page    origin      length       input sections
+--------  ----  ----------  ----------   ----------------
+.intvecs   0    00000000    0000026c     
+                  00000000    0000026c     tm4c123gh6pm_startup_ccs.obj (.intvecs)
+
+.text      0    0000026c    0000106a     
+                  0000026c    000006e8     mini_project.obj (.text)
+                  00000954    00000574     fault_handlers.obj (.text)
+                  00000ec8    00000164     uart0.obj (.text)
+                  0000102c    0000015a     c_fnc.obj (.text)
+                  00001186    0000009c     rtsv7M4_T_le_v4SPD16_eabi.lib : memcpy_t2.asm.obj (.text)
+                  00001222    00000066     asm_src.obj (.text)
+                  00001288    0000002c     rtsv7M4_T_le_v4SPD16_eabi.lib : boot_cortex_m.c.obj (.text:_c_int00_noinit_noargs:_c_int00_noinit_noargs)
+                  000012b4    00000010     clock.obj (.text)
+                  000012c4    0000000a     tm4c123gh6pm_startup_ccs.obj (.text)
+                  000012ce    00000004     rtsv7M4_T_le_v4SPD16_eabi.lib : pre_init.c.obj (.text:_system_pre_init)
+                  000012d2    00000004                                   : exit.c.obj (.text:abort:abort)
+
+.const     0    000012d6    00000014     
+                  000012d6    00000014     mini_project.obj (.const:$P$T0$1)
+
+.cinit     0    00000000    00000000     UNINITIALIZED
+
+.init_array 
+*          0    00000000    00000000     UNINITIALIZED
+
+.stack     0    20000000    00000200     UNINITIALIZED
+                  20000000    00000004     rtsv7M4_T_le_v4SPD16_eabi.lib : boot_cortex_m.c.obj (.stack)
+                  20000004    000001fc     --HOLE--
+
+__llvm_prf_cnts 
+*          0    20000000    00000000     UNINITIALIZED
+
+MODULE SUMMARY
+
+       Module                         code   ro data   rw data
+       ------                         ----   -------   -------
+    ./
+       mini_project.obj               1768   20        0      
+       fault_handlers.obj             1396   0         0      
+       tm4c123gh6pm_startup_ccs.obj   10     620       0      
+       uart0.obj                      356    0         0      
+       c_fnc.obj                      346    0         0      
+       asm_src.obj                    102    0         0      
+       clock.obj                      16     0         0      
+    +--+------------------------------+------+---------+---------+
+       Total:                         3994   640       0      
+                                                              
+    /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/lib/rtsv7M4_T_le_v4SPD16_eabi.lib
+       memcpy_t2.asm.obj              156    0         0      
+       boot_cortex_m.c.obj            44     0         0      
+       exit.c.obj                     4      0         0      
+       pre_init.c.obj                 4      0         0      
+    +--+------------------------------+------+---------+---------+
+       Total:                         208    0         0      
+                                                              
+       Stack:                         0      0         512    
+    +--+------------------------------+------+---------+---------+
+       Grand Total:                   4202   640       512    
+
+
+GLOBAL SYMBOLS: SORTED ALPHABETICALLY BY Name 
+
+address   name                   
+-------   ----                   
+000012d3  C$$EXIT                
+000012c5  ResetISR               
+20000200  __STACK_END            
+00000200  __STACK_SIZE           
+20000200  __STACK_TOP            
+ffffffff  __TI_pprof_out_hndl    
+ffffffff  __TI_prof_data_size    
+ffffffff  __TI_prof_data_start   
+00000000  __TI_static_base__     
+00001187  __aeabi_memcpy         
+00001187  __aeabi_memcpy4        
+00001187  __aeabi_memcpy8        
+ffffffff  __binit__              
+ffffffff  __c_args__             
+UNDEFED   __mpu_init             
+20000000  __stack                
+20000000  __start___llvm_prf_cnts
+20000000  __stop___llvm_prf_cnts 
+00001289  _c_int00_noinit_noargs 
+000012cf  _system_pre_init       
+000012d3  abort                  
+ffffffff  binit                  
+00000973  busFaultISR            
+00000000  g_pfnVectors           
+00000417  getFieldInteger        
+000003d7  getFieldString         
+00001241  getMsp                 
+0000123b  getPsp                 
+00001247  getStackDump           
+00000fc9  getcUart0              
+00000987  hardFaultISR           
+00000519  initHw                 
+000012b5  initSystemClockTo40Mhz 
+00000ec9  initUart0              
+00000627  ipcs                   
+000004a5  isCommand              
+00000fdd  kbhitUart0             
+00000601  kill                   
+0000086f  main                   
+00001187  memcpy                 
+00000ad5  mpuFaultISR            
+0000107d  numToStr               
+0000026d  parseFields            
+00000c49  pendSvISR              
+000005d9  pi                     
+00000571  pidof                  
+00000559  pkill                  
+000005b1  preempt                
+00000637  ps                     
+00000f81  putcUart0              
+00000f9d  putsUart0              
+00000589  sched                  
+00001229  setControlReg          
+00001223  setPsp                 
+00000f3d  setUart0BaudRate       
+0000065d  shell                  
+0000102d  strCmp                 
+00000cb1  triggerBusFault        
+00000d71  triggerHardFault       
+00000db9  triggerMpuFault        
+00000dfd  triggerPendSv          
+00000d29  triggerUsageFault      
+0000111b  uint32ToHexString      
+00000955  usageFaultISR          
+00000647  yeild                  
+
+
+GLOBAL SYMBOLS: SORTED BY Symbol Address 
+
+address   name                   
+-------   ----                   
+00000000  __TI_static_base__     
+00000000  g_pfnVectors           
+00000200  __STACK_SIZE           
+0000026d  parseFields            
+000003d7  getFieldString         
+00000417  getFieldInteger        
+000004a5  isCommand              
+00000519  initHw                 
+00000559  pkill                  
+00000571  pidof                  
+00000589  sched                  
+000005b1  preempt                
+000005d9  pi                     
+00000601  kill                   
+00000627  ipcs                   
+00000637  ps                     
+00000647  yeild                  
+0000065d  shell                  
+0000086f  main                   
+00000955  usageFaultISR          
+00000973  busFaultISR            
+00000987  hardFaultISR           
+00000ad5  mpuFaultISR            
+00000c49  pendSvISR              
+00000cb1  triggerBusFault        
+00000d29  triggerUsageFault      
+00000d71  triggerHardFault       
+00000db9  triggerMpuFault        
+00000dfd  triggerPendSv          
+00000ec9  initUart0              
+00000f3d  setUart0BaudRate       
+00000f81  putcUart0              
+00000f9d  putsUart0              
+00000fc9  getcUart0              
+00000fdd  kbhitUart0             
+0000102d  strCmp                 
+0000107d  numToStr               
+0000111b  uint32ToHexString      
+00001187  __aeabi_memcpy         
+00001187  __aeabi_memcpy4        
+00001187  __aeabi_memcpy8        
+00001187  memcpy                 
+00001223  setPsp                 
+00001229  setControlReg          
+0000123b  getPsp                 
+00001241  getMsp                 
+00001247  getStackDump           
+00001289  _c_int00_noinit_noargs 
+000012b5  initSystemClockTo40Mhz 
+000012c5  ResetISR               
+000012cf  _system_pre_init       
+000012d3  C$$EXIT                
+000012d3  abort                  
+20000000  __stack                
+20000000  __start___llvm_prf_cnts
+20000000  __stop___llvm_prf_cnts 
+20000200  __STACK_END            
+20000200  __STACK_TOP            
+ffffffff  __TI_pprof_out_hndl    
+ffffffff  __TI_prof_data_size    
+ffffffff  __TI_prof_data_start   
+ffffffff  __binit__              
+ffffffff  __c_args__             
+ffffffff  binit                  
+UNDEFED   __mpu_init             
+
+[65 symbols]

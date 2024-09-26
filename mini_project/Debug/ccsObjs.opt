@@ -1,0 +1,9 @@
+"./asm_src.obj"
+"./c_fnc.obj"
+"./clock.obj"
+"./fault_handlers.obj"
+"./mini_project.obj"
+"./tm4c123gh6pm_startup_ccs.obj"
+"./uart0.obj"
+"../tm4c123gh6pm.cmd"
+-llibc.a
