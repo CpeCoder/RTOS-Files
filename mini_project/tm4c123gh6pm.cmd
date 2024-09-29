@@ -35,13 +35,13 @@ SECTIONS
     .pinit  :   > FLASH
     .init_array : > FLASH
 
-    .pstack :	> 0x20001000
-
     .vtable :   > 0x20000000
     .data   :   > SRAM
     .bss    :   > SRAM
     .sysmem :   > SRAM
     .stack  :   > SRAM
+
+    .pstack :	> 0x20001000
 }
 
 __STACK_TOP = __stack + 512;

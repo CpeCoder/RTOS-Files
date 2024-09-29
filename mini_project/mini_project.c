@@ -56,6 +56,7 @@ typedef struct _TASK_DATA
 // **************************************************************************************************************
 uint64_t subregionUseData = 0;
 
+void* malloc_from_heap(uint32_t sizeInBytes);
 /**
  * puts null anywhere except num or apha, sets field type and field position
  */
@@ -185,14 +186,14 @@ void initHw()
     GPIO_PORTF_DEN_R |= GREEN_LED_MASK | RED_LED_MASK;  // enable LEDs
 }
 
-void pkill(const char str[])
+void pkill(char str[])
 {
     putsUart0((char*)str);
     putsUart0(" killed");
     putcUart0('\n');
 }
 
-void pidof(const char name[])
+void pidof(char name[])
 {
     putsUart0((char*)name);
     putsUart0(" launched");
@@ -300,6 +301,15 @@ void shell(void)
                 {
                     NVIC_APINT_R = NVIC_APINT_VECTKEY | NVIC_APINT_SYSRESETREQ;
                 }
+                else if(isCommand(&data, "malloc", 1))
+                {
+                    uint32_t size = getFieldInteger(&data, 1);
+                    uint32_t addr = (uint32_t) malloc_from_heap(size);
+                    char addrStr[10];
+                    uint32ToHexString(&addr, addrStr);
+                    putsUart0(addrStr);
+                    putcUart0('\n');
+                }
                 else if(isCommand(&data, "ps", 0))
                 {
                     ps();
@@ -354,6 +364,36 @@ void shell(void)
     }
 }
 
+void getMallocAddr(uint32_t* regionAddr, uint32_t* subregionAddr, uint8_t allocatedIndex)
+{
+    // region ladder, using if else-if for simplicity
+    if(allocatedIndex < 8)
+    {
+        *regionAddr = 0x20001000;
+        *subregionAddr = (allocatedIndex%8) * 512;
+    }
+    else if(allocatedIndex < 16)
+    {
+        *regionAddr = 0x20002000;
+        *subregionAddr = (allocatedIndex%8) * 1024;
+    }
+    else if(allocatedIndex < 24)
+    {
+        *regionAddr = 0x20004000;
+        *subregionAddr = (allocatedIndex%8) * 512;
+    }
+    else if(allocatedIndex < 32)
+    {
+        *regionAddr = 0x20005000;
+        *subregionAddr = (allocatedIndex%8) * 1024;
+    }
+    else if(allocatedIndex < 40)
+    {
+        *regionAddr = 0x20007000;
+        *subregionAddr = (allocatedIndex%8) * 512;
+    }
+}
+
 void calculateBlockRequired(uint32_t requestedSize, uint8_t* blockCount1024, uint8_t* blockCount512)
 {
     *blockCount1024 = 0;
@@ -362,48 +402,299 @@ void calculateBlockRequired(uint32_t requestedSize, uint8_t* blockCount1024, uin
     uint32_t remainingSize = requestedSize % 1024; // remaining size
 
     // If there's any remaining size, calculate the number of 512-byte blocks needed
-    if (remainingSize > 0)
+    if(remainingSize > 0)
     {
-        if (remainingSize > 512)
+        // if more than 1536B allocate multiple 1024B blocks, else do the special case
+        if(remainingSize > 512)
         {
             *blockCount1024 += 1; // if remains more than 512, allocate one more 1024B block
         }
         else
         {
-            *blockCount512 = 1; // allocate 512B block for the remainder
+            if(*blockCount1024 > 1)
+            {
+                *blockCount1024 += 1;
+            }
+            else
+            {
+                *blockCount512 = 1; // allocate 512B block for the remainder
+            }
         }
     }
 }
 
-bool findConsecutiveSpace()
+/* Fnc runs First Fit Algorithm to find space in specified */
+/* returns allocatedIndex and true if space found, takes in needed 512B and 1024B blocks */
+bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, uint8_t* needed512Blocks)
 {
     bool found = 0;
+    uint8_t* inUse1536 = (uint8_t*)(&subregionUseData) + 7; // 63:56 of inUse chances
+    uint8_t* inUse1024 = (uint8_t*)(&subregionUseData) + 6; // 55:48 of inUse blocks
+    uint8_t* inUse512  = (uint8_t*)(&subregionUseData) + 5; // 47:40 of inUse blocks
+    uint8_t* block3InUse4KB = (uint8_t*)(&subregionUseData) + 4; //   |  4 KB  |   ' 0x20008000
+    uint8_t* block2InUse8KB = (uint8_t*)(&subregionUseData) + 3; //   |  8 KB  |   '
+    uint8_t* block2InUse4KB = (uint8_t*)(&subregionUseData) + 2; //   |  4 KB  |   '
+    uint8_t* block1InUse8KB = (uint8_t*)(&subregionUseData) + 1; //   |  8 KB  |   '
+    uint8_t* block1InUse4KB = (uint8_t*)(&subregionUseData);     //   |  4 KB  |   v 0x20001000
+
+    uint8_t i;
+    if((*needed1024Blocks == 1) && (*needed512Blocks == 1)) // 1536B multiple, special case
+    {
+        for(i = 1; i < 5; i++)
+        {
+            // region on edge of multiple of 8 and 4KB 8KB block alternates, so check one up and down
+            bool lowerRegionEdge = (bool)(subregionUseData & (1 << ((i*8) - 1)));
+            bool upperRegionEdge = (bool)(subregionUseData & (1 << ((i*8)) ) );
+            if(!lowerRegionEdge && !upperRegionEdge)
+            {
+                // space found, return allocatedIndex and found
+                found = 1;
+                (*inUse512)++;
+                (*inUse1024)++;
+                (*inUse1536)++;
+                subregionUseData |= 3 << ((i*8) - 1);     // marks upper and lower as 'in use'
+                *allocatedIndex = (i*8)-1;  // assignment of lowerRegion in terms of index
+                return found;
+            }
+        }
+        return found;
+    }
+    else if(*needed1024Blocks != 0) // 1024B multiple
+    {
+        for(i = 0; i < 2; i++)  // 2 8KB blocks
+        {
+            uint8_t* currentBlock8kb = (i == 0) ? block1InUse8KB : block2InUse8KB;
+            uint8_t j, count1024B = 0;
+            for(j = 0; j < 8; j++)  // 8 sub-regions in one 8KB block
+            {
+                // saving edge sub-regions if less or equal to 6KB
+                if((*needed1024Blocks <= 6) && (j==0 || j==7)) continue;
+
+                if(!(*currentBlock8kb & (1 << j)))  // for detecting continuity
+                {
+                    count1024B++;
+                }
+                else    // reset if occupied
+                {
+                    count1024B = 0;
+                }
+
+                if(count1024B == *needed1024Blocks) // found space
+                {
+                    found = 1;
+                    (*inUse1024)++;
+                    int8_t k, startIndex = j - *needed1024Blocks + 1;
+                    for(k = j; k >= startIndex; k--)
+                    {
+                        // mark occupied
+                        *currentBlock8kb |= (1 << k);
+                        // depending on which block, return the index
+                    }
+                    *allocatedIndex = (i == 0) ? (8 + startIndex) : (24 + startIndex);
+                    return found;
+                }
+            }
+        }
+        // space not found for 6KB or less needed, check with edge sub-regions
+        if(!found && (*needed1024Blocks <= 6))
+        {
+            for(i = 0; i < 2; i++)  // 2 8KB blocks
+            {
+                uint8_t* currentBlock8kb = (i == 0) ? block1InUse8KB : block2InUse8KB;
+                uint8_t j, count1024B = 0;
+                for(j = 0; j < 8; j++)  // 8 sub-regions in one 8KB block
+                {
+                    if(!(*currentBlock8kb & (1 << j)))  // for detecting continuity
+                    {
+                        count1024B++;
+                    }
+                    else    // reset if occupied
+                    {
+                        count1024B = 0;
+                    }
+
+                    if(count1024B == *needed1024Blocks) // found space
+                    {
+                        (*inUse1024)++;
+                        found = 1;
+                        int8_t k, startIndex = j - *needed1024Blocks + 1;
+                        for(k = j; k >= startIndex; k--)
+                        {
+                            // mark occupied
+                            *currentBlock8kb |= (1 << k);
+                            // depending on which block, return the index
+                        }
+                        *allocatedIndex = (i == 0) ? (8 + startIndex) : (24 + startIndex);
+                        return found;
+                    }
+                }
+            }
+        }
+    }
+    else if(*needed512Blocks != 0) // 512B multiple
+    {
+        for(i = 0; i < 3; i++)  // 2 8KB blocks
+        {
+            // iterate through 4KB blocks
+            uint8_t* currentBlock4kb = (i == 0) ? block1InUse4KB :
+                                        (i == 1) ? block2InUse4KB : block3InUse4KB;
+            uint8_t j, count512B = 0;
+            for(j = 0; j < 8; j++)  // 8 sub-regions in one 4KB block
+            {
+                // saving edge sub-regions if less or equal to 3KB
+                if((*needed512Blocks <= 6) && (j==0) && (i==2)) continue;
+                if((*needed512Blocks <= 6) && (j==0 || j==7) && (i==1)) continue;
+                if((*needed512Blocks <= 6) && (j==7) && (i==0)) continue;
+
+                if(!(*currentBlock4kb & (1 << j)))  // for detecting continuity
+                {
+                    count512B++;
+                }
+                else    // reset if occupied
+                {
+                    count512B = 0;
+                }
+
+                if(count512B == *needed512Blocks) // found space
+                {
+                    found = 1;
+                    (*inUse512)++;
+                    int8_t k, startIndex = j - *needed512Blocks + 1;
+                    for(k = j; k >= startIndex; k--)
+                    {
+                        // mark occupied
+                        *currentBlock4kb |= (1 << k);
+                        // depending on which block, return the index
+                    }
+                    *allocatedIndex = (i*16) + startIndex;
+                    return found;
+                }
+            }
+        }
+        // space not found for 3KB or less needed, check with edge sub-regions
+        if(!found && (*needed1024Blocks <= 6))
+        {
+            for(i = 0; i < 3; i++)  // 2 8KB blocks
+            {
+                // iterate through 4KB blocks
+                uint8_t* currentBlock4kb = (i == 0) ? block1InUse4KB :
+                                            (i == 1) ? block2InUse4KB : block3InUse4KB;
+                uint8_t j, count512B = 0;
+                for(j = 0; j < 8; j++)  // 8 sub-regions in one 4KB block
+                {
+                    if(!(*currentBlock4kb & (1 << j)))  // for detecting continuity
+                    {
+                        count512B++;
+                    }
+                    else    // reset if occupied
+                    {
+                        count512B = 0;
+                    }
+
+                    if(count512B == *needed512Blocks) // found space
+                    {
+                        found = 1;
+                        (*inUse512)++;
+                        int8_t k, startIndex = j - *needed512Blocks + 1;
+                        for(k = j; k >= startIndex; k--)
+                        {
+                            // mark occupied
+                            *currentBlock4kb |= (1 << k);
+                            // depending on which block, return the index
+                        }
+                        *allocatedIndex = (i*16) + startIndex;
+                        return found;
+                    }
+                }
+            }
+        }
+    }
+    return found;
 }
 
 void* malloc_from_heap(uint32_t sizeInBytes)
 {
-    uint8_t* inUse1536 = (uint8_t*)(&subregionUseData) + 7; // point to 63:56 of inUse
-    uint8_t* inUse1024 = (uint8_t*)(&subregionUseData) + 6; // point to 55:48 of inUse
-    uint8_t* inUse512  = (uint8_t*)(&subregionUseData) + 5; // point to 47:40 of inUse
+    uint8_t* inUse1536 = (uint8_t*)(&subregionUseData) + 7; // 63:56 of inUse chances
+    uint8_t* inUse1024 = (uint8_t*)(&subregionUseData) + 6; // 55:48 of inUse blocks
+    uint8_t* inUse512  = (uint8_t*)(&subregionUseData) + 5; // 47:40 of inUse blocks
 
+    bool ok = 0;
     uint8_t needed1024Blocks, needed512Blocks;
     calculateBlockRequired(sizeInBytes, &needed1024Blocks, &needed512Blocks);
 
-    if((needed1024Blocks != 0) || (needed512Blocks != 0))
+    uint8_t totalSpaceNeeded = needed1024Blocks*2 + needed512Blocks; // Space respect to 512B block
+    uint8_t block1024Avaliable = MAX_1024B_BLOCK - (*inUse1024);
+    uint8_t block512Avaliable = MAX_512B_BLOCK - (*inUse512);
+
+    //
+    if((totalSpaceNeeded <= (block1024Avaliable*2 + block512Avaliable)) && totalSpaceNeeded > 16)
     {
-        void* addrPtr;
-        if((needed1024Blocks != 0) && (needed512Blocks != 0)) // 1536B multiple
-        {
+        return NULL;    // all blocks used
+    }
 
-        }
-        else if(needed1024Blocks != 0) // 1024B multiple
-        {
+    if((needed1024Blocks > block1024Avaliable) && (totalSpaceNeeded <= block512Avaliable))
+    {
+        needed512Blocks = totalSpaceNeeded;     // not enough 1024B, assign multiple 512B
+        needed1024Blocks = 0;                   // transfered to 512B block
+    }
+    else if((needed512Blocks > block512Avaliable) && ((needed1024Blocks + 1) <= block1024Avaliable))
+    {
+        needed512Blocks = 0;                // transfered to 1024B block
+        needed1024Blocks += 1;              // Calculating fnc returns max 1 512B block
+    }
 
-        }
-        else if(needed512Blocks != 0) // 512B multiple
+    void* addrPtr;
+    uint8_t allocatedIndex = 0;
+    if((needed1024Blocks == 1) && (needed512Blocks == 1)) // 1536B needed, special case
+    {
+        if(*inUse1536 < MAX_1536B_BLOCK)
         {
-
+            ok = findConsecutiveSpace(&allocatedIndex, &needed1024Blocks, &needed512Blocks);
         }
+        if(!ok)     // space not found
+        {
+            needed1024Blocks = 0;
+            needed512Blocks = 3;    // on unavailability of edge regions, allocate multiple 512B
+            ok = findConsecutiveSpace(&allocatedIndex, &needed1024Blocks, &needed512Blocks);
+        }
+        if(!ok)     // space not found
+        {
+            needed1024Blocks = 2;   // allocate multiple 1024B, waste space
+            needed512Blocks = 0;
+            ok = findConsecutiveSpace(&allocatedIndex, &needed1024Blocks, &needed512Blocks);
+        }
+    }
+    else
+    {
+        if(needed1024Blocks != 0)       // multiple of 1024B
+        {
+            ok = findConsecutiveSpace(&allocatedIndex, &needed1024Blocks, &needed512Blocks);
+            if(!ok)     // unavailability on 8KB block
+            {
+                needed512Blocks = totalSpaceNeeded;    // allocate multiples of 512B
+                needed1024Blocks = 0;
+                ok = findConsecutiveSpace(&allocatedIndex, &needed1024Blocks, &needed512Blocks);
+            }
+        }
+        if(needed512Blocks != 0)        // multiple of 512B
+        {
+            ok = findConsecutiveSpace(&allocatedIndex, &needed1024Blocks, &needed512Blocks);
+            if(!ok)     // unavailability on 4KB block
+            {
+                needed512Blocks = 0;
+                needed1024Blocks = (totalSpaceNeeded % 2) ? (totalSpaceNeeded/2) + 1 :
+                                    totalSpaceNeeded/2;  // allocate multiples of 1024B
+                ok = findConsecutiveSpace(&allocatedIndex, &needed1024Blocks, &needed512Blocks);
+            }
+        }
+    }
+
+    if(ok)
+    {
+        uint32_t regionAddr, subregionAddr;
+        getMallocAddr(&regionAddr, &subregionAddr, allocatedIndex);
+        addrPtr = (void*)(regionAddr + subregionAddr);
+        return addrPtr;
     }
     else    // sizeInBytes = 0
     {
