@@ -30,6 +30,7 @@
 #define MAX_1024B_BLOCK 16
 #define MAX_512B_BLOCK 24
 #define MAX_SUBREGION 40
+#define PSP_ADDRESS 0x20000500
 
 // data from UI
 typedef struct _USER_DATA
@@ -364,33 +365,112 @@ void shell(void)
     }
 }
 
-void getMallocAddr(uint32_t* regionAddr, uint32_t* subregionAddr, uint8_t allocatedIndex)
+uint64_t createNoSramAccessMask()
 {
-    // region ladder, using if else-if for simplicity
-    if(allocatedIndex < 8)
+    // each byte presents a region and each bit a sub-region...0xFF disables sub-region
+        // lsb presents lowest sub-region
+    return 0xFFFFFFFFFFFFFFFF;
+}
+
+void applySramAccessMask(uint64_t srdBitMask)
+{
+    uint8_t i, j=0;
+    // 0 and 1 region used for flash and peripherals, respectively
+        // 2 is OS Kernel....3-7 follows 4KB -> 8KB -> 4KB -> 4KB -> 8KB
+    for(i = 2; i < 8; i++)
     {
-        *regionAddr = 0x20001000;
-        *subregionAddr = (allocatedIndex%8) * 512;
+        uint8_t regionSrdMask = (uint8_t)(srdBitMask >> (j*8));
+        NVIC_MPU_NUMBER_R = i;
+        // disable region before updating
+        NVIC_MPU_ATTR_R &= ~NVIC_MPU_ATTR_ENABLE;
+        // clear and assign mask to each sub-regions bit
+        NVIC_MPU_ATTR_R &= 0xFFFF00FF;
+        NVIC_MPU_ATTR_R |= regionSrdMask << 8;
+        // enable region after updating
+        NVIC_MPU_ATTR_R |= NVIC_MPU_ATTR_ENABLE;
+        ++j;
     }
-    else if(allocatedIndex < 16)
+}
+
+void addSramAccessWindow(uint64_t *srdBitMask, uint32_t *baseAdd, uint32_t sizeInBytes)
+{
+    uint16_t subregion, subregionSize;
+    uint8_t allocatedIndex;
+    uint32_t region, baseAddrValue = (uint32_t)(baseAdd);
+
+    while(sizeInBytes)  // runs to sizeInBytes equals 0
     {
-        *regionAddr = 0x20002000;
-        *subregionAddr = (allocatedIndex%8) * 1024;
+        if(baseAddrValue >= 0x20008000)
+        {
+            return;
+        }
+
+        region = baseAddrValue & 0xFFFFF000;     // Mask to get the region
+        subregion = baseAddrValue & 0x00000FFF;  // Mask to get the subregion
+
+        if(region == 0x20000000)            // region 1 : 4KB
+        {
+            subregionSize = 512;
+            allocatedIndex = subregion / subregionSize;
+        }
+        else if(region == 0x20001000)            // region 1 : 4KB
+        {
+            subregionSize = 512;
+            allocatedIndex = 8 + (subregion / subregionSize);
+        }
+        else if(region == 0x20002000)       // region 2 : 8KB
+        {
+            subregionSize = 1024;
+            allocatedIndex = 16 + (subregion / subregionSize);
+        }
+        else if(region == 0x20003000)
+        {
+            subregionSize = 1024;
+            allocatedIndex = 20 + (subregion / subregionSize);
+        }
+        else if(region == 0x20004000)       // region 3 : 4KB
+        {
+            subregionSize = 512;
+            allocatedIndex = 24 + (subregion / subregionSize);
+        }
+        else if(region == 0x20005000)       // region 4 : 4KB
+        {
+            subregionSize = 512;
+            allocatedIndex = 32 + (subregion / subregionSize);
+        }
+        else if(region == 0x20006000)       // region 5 : 8KB
+        {
+            subregionSize = 1024;
+            allocatedIndex = 40 + (subregion / subregionSize);
+        }
+        else if(region == 0x20007000)       // region 5 : 8KB
+        {
+            subregionSize = 1024;
+            allocatedIndex = 44 + (subregion / subregionSize);
+        }
+        (*srdBitMask) &= ~(1 << allocatedIndex);
+        sizeInBytes -= subregionSize;
+        baseAddrValue += subregionSize;
     }
-    else if(allocatedIndex < 24)
+
+}
+
+void getMallocAddr(uint16_t* subregion, uint16_t* region, uint8_t allocatedIndex)
+{
+    *region = ((allocatedIndex / 8) * 0x1000);
+    if (allocatedIndex >= 16)
     {
-        *regionAddr = 0x20004000;
-        *subregionAddr = (allocatedIndex%8) * 512;
+        *region += 0x1000;  // skips 0x20003000 by adding
     }
-    else if(allocatedIndex < 32)
+
+    // sub-region address based on the block
+    if (allocatedIndex < 8 || (allocatedIndex >= 16 && allocatedIndex < 32))
     {
-        *regionAddr = 0x20005000;
-        *subregionAddr = (allocatedIndex%8) * 1024;
+        *subregion = (allocatedIndex % 8) * 512;
     }
-    else if(allocatedIndex < 40)
+    else
     {
-        *regionAddr = 0x20007000;
-        *subregionAddr = (allocatedIndex%8) * 512;
+        *subregion = (allocatedIndex % 8) * 1024;
     }
 }
 
@@ -431,8 +511,8 @@ bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, ui
     uint8_t* inUse1536 = (uint8_t*)(&subregionUseData) + 7; // 63:56 of inUse chances
     uint8_t* inUse1024 = (uint8_t*)(&subregionUseData) + 6; // 55:48 of inUse blocks
     uint8_t* inUse512  = (uint8_t*)(&subregionUseData) + 5; // 47:40 of inUse blocks
-    uint8_t* block3InUse4KB = (uint8_t*)(&subregionUseData) + 4; //   |  4 KB  |   ' 0x20008000
-    uint8_t* block2InUse8KB = (uint8_t*)(&subregionUseData) + 3; //   |  8 KB  |   '
+    uint8_t* block2InUse8KB = (uint8_t*)(&subregionUseData) + 4; //   |  8 KB  |   ' 0x20008000
+    uint8_t* block3InUse4KB = (uint8_t*)(&subregionUseData) + 3; //   |  4 KB  |   '
     uint8_t* block2InUse4KB = (uint8_t*)(&subregionUseData) + 2; //   |  4 KB  |   '
     uint8_t* block1InUse8KB = (uint8_t*)(&subregionUseData) + 1; //   |  8 KB  |   '
     uint8_t* block1InUse4KB = (uint8_t*)(&subregionUseData);     //   |  4 KB  |   v 0x20001000
@@ -440,11 +520,11 @@ bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, ui
     uint8_t i;
     if((*needed1024Blocks == 1) && (*needed512Blocks == 1)) // 1536B multiple, special case
     {
-        for(i = 1; i < 5; i++)
+        for(i = 1; i < 4; i++)
         {
             // region on edge of multiple of 8 and 4KB 8KB block alternates, so check one up and down
-            bool lowerRegionEdge = (bool)(subregionUseData & (1 << ((i*8) - 1)));
-            bool upperRegionEdge = (bool)(subregionUseData & (1 << ((i*8)) ) );
+            bool lowerRegionEdge = (bool) ((i == 1 || i == 2) ? (subregionUseData & (1 << ((i*8) - 1))) : (subregionUseData & ((uint64_t)1 << 31)));
+            bool upperRegionEdge = (bool) ((i == 1 || i == 2) ? (subregionUseData & (1 << (i*8))) : (subregionUseData & ((uint64_t)1 << 32)));
             if(!lowerRegionEdge && !upperRegionEdge)
             {
                 // space found, return allocatedIndex and found
@@ -452,8 +532,8 @@ bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, ui
                 (*inUse512)++;
                 (*inUse1024)++;
                 (*inUse1536)++;
-                subregionUseData |= 3 << ((i*8) - 1);     // marks upper and lower as 'in use'
-                *allocatedIndex = (i*8)-1;  // assignment of lowerRegion in terms of index
+                subregionUseData |= (i == 1 || i == 2) ? (3 << ((i*8) - 1)) : ((uint64_t)3 << 31);     // marks upper and lower as 'in use'
+                *allocatedIndex = (i == 1 || i == 2) ? ((i*8)-1) : (31);  // assignment of lowerRegion in terms of index
                 return found;
             }
         }
@@ -463,12 +543,17 @@ bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, ui
     {
         for(i = 0; i < 2; i++)  // 2 8KB blocks
         {
+            // only save edge sub-region in 8KB if 4KB edge is not used, shifting hard-coded by design
+            bool lower4kbRegionEdge = (bool)((i == 0) ? (subregionUseData & (1 << 7)) : (subregionUseData & ((uint64_t)1 << 31)));
+            bool upper4kbRegionEdge = (bool)((i == 0) ? (subregionUseData & (1 << 16)) : 0);    // second 8KB no upper edge
+
             uint8_t* currentBlock8kb = (i == 0) ? block1InUse8KB : block2InUse8KB;
             uint8_t j, count1024B = 0;
             for(j = 0; j < 8; j++)  // 8 sub-regions in one 8KB block
             {
                 // saving edge sub-regions if less or equal to 6KB
-                if((*needed1024Blocks <= 6) && (j==0 || j==7)) continue;
+                if((*needed1024Blocks <= 6) && (j==0) && !lower4kbRegionEdge) continue;
+                else if((*needed1024Blocks <= 6) && (j==7) && !upper4kbRegionEdge) continue;
 
                 if(!(*currentBlock8kb & (1 << j)))  // for detecting continuity
                 {
@@ -482,15 +567,15 @@ bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, ui
                 if(count1024B == *needed1024Blocks) // found space
                 {
                     found = 1;
-                    (*inUse1024)++;
                     int8_t k, startIndex = j - *needed1024Blocks + 1;
                     for(k = j; k >= startIndex; k--)
                     {
+                        (*inUse1024)++;
                         // mark occupied
                         *currentBlock8kb |= (1 << k);
-                        // depending on which block, return the index
                     }
-                    *allocatedIndex = (i == 0) ? (8 + startIndex) : (24 + startIndex);
+                    // depending on which block, return the index
+                    *allocatedIndex = (i == 0) ? (8 + startIndex) : (32 + startIndex);
                     return found;
                 }
             }
@@ -515,16 +600,16 @@ bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, ui
 
                     if(count1024B == *needed1024Blocks) // found space
                     {
-                        (*inUse1024)++;
                         found = 1;
                         int8_t k, startIndex = j - *needed1024Blocks + 1;
                         for(k = j; k >= startIndex; k--)
                         {
+                            (*inUse1024)++;
                             // mark occupied
                             *currentBlock8kb |= (1 << k);
-                            // depending on which block, return the index
                         }
-                        *allocatedIndex = (i == 0) ? (8 + startIndex) : (24 + startIndex);
+                        // depending on which block, return the index
+                        *allocatedIndex = (i == 0) ? (8 + startIndex) : (32 + startIndex);
                         return found;
                     }
                 }
@@ -533,18 +618,22 @@ bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, ui
     }
     else if(*needed512Blocks != 0) // 512B multiple
     {
-        for(i = 0; i < 3; i++)  // 2 8KB blocks
+        for(i = 0; i < 3; i++)  // 3 4KB blocks
         {
+            // only save edge sub-region in 4KB if 8KB edge is not used, shifting hard-coded by design
+            bool lower8kbRegionEdge = (bool) (subregionUseData & (1 << 15));
+            bool upper8kbRegionEdge = (bool)((i == 0) ? (subregionUseData & (1 << 8)) : (subregionUseData & ((uint64_t)1 << 32)));
+
             // iterate through 4KB blocks
             uint8_t* currentBlock4kb = (i == 0) ? block1InUse4KB :
                                         (i == 1) ? block2InUse4KB : block3InUse4KB;
             uint8_t j, count512B = 0;
             for(j = 0; j < 8; j++)  // 8 sub-regions in one 4KB block
             {
-                // saving edge sub-regions if less or equal to 3KB
-                if((*needed512Blocks <= 6) && (j==0) && (i==2)) continue;
-                if((*needed512Blocks <= 6) && (j==0 || j==7) && (i==1)) continue;
-                if((*needed512Blocks <= 6) && (j==7) && (i==0)) continue;
+                // saving edge sub-regions if less or equal to 3KB, design specific
+                if((*needed512Blocks <= 6) && (j==7) && (i==2) && !upper8kbRegionEdge) continue;
+                else if((*needed512Blocks <= 6) && (j==0) && (i==1) && !lower8kbRegionEdge) continue;
+                else if((*needed512Blocks <= 6) && (j==7) && (i==0) && !upper8kbRegionEdge) continue;
 
                 if(!(*currentBlock4kb & (1 << j)))  // for detecting continuity
                 {
@@ -558,21 +647,21 @@ bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, ui
                 if(count512B == *needed512Blocks) // found space
                 {
                     found = 1;
-                    (*inUse512)++;
                     int8_t k, startIndex = j - *needed512Blocks + 1;
                     for(k = j; k >= startIndex; k--)
                     {
+                        (*inUse512)++;
                         // mark occupied
                         *currentBlock4kb |= (1 << k);
-                        // depending on which block, return the index
                     }
-                    *allocatedIndex = (i*16) + startIndex;
+                    // depending on which block, return the index
+                    *allocatedIndex = (i == 0 || i == 1) ? ((i*16) + startIndex) : (24 + startIndex);
                     return found;
                 }
             }
         }
         // space not found for 3KB or less needed, check with edge sub-regions
-        if(!found && (*needed1024Blocks <= 6))
+        if(!found && (*needed512Blocks <= 6))
         {
             for(i = 0; i < 3; i++)  // 2 8KB blocks
             {
@@ -594,15 +683,15 @@ bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, ui
                     if(count512B == *needed512Blocks) // found space
                     {
                         found = 1;
-                        (*inUse512)++;
                         int8_t k, startIndex = j - *needed512Blocks + 1;
                         for(k = j; k >= startIndex; k--)
                         {
+                            (*inUse512)++;
                             // mark occupied
                             *currentBlock4kb |= (1 << k);
-                            // depending on which block, return the index
                         }
-                        *allocatedIndex = (i*16) + startIndex;
+                        // depending on which block, return the index
+                        *allocatedIndex = (i == 0 || i == 1) ? ((i*16) + startIndex) : (24 + startIndex);
                         return found;
                     }
                 }
@@ -627,11 +716,12 @@ void* malloc_from_heap(uint32_t sizeInBytes)
     uint8_t block512Avaliable = MAX_512B_BLOCK - (*inUse512);
 
     //
-    if((totalSpaceNeeded <= (block1024Avaliable*2 + block512Avaliable)) && totalSpaceNeeded > 16)
+    if((totalSpaceNeeded > (block1024Avaliable*2 + block512Avaliable)) || totalSpaceNeeded > 16)
     {
         return NULL;    // all blocks used
     }
 
+    // confirms block availability, not the consecutiveness so many if's in next block
     if((needed1024Blocks > block1024Avaliable) && (totalSpaceNeeded <= block512Avaliable))
     {
         needed512Blocks = totalSpaceNeeded;     // not enough 1024B, assign multiple 512B
@@ -676,14 +766,14 @@ void* malloc_from_heap(uint32_t sizeInBytes)
                 ok = findConsecutiveSpace(&allocatedIndex, &needed1024Blocks, &needed512Blocks);
             }
         }
-        if(needed512Blocks != 0)        // multiple of 512B
+        else if(needed512Blocks != 0)        // multiple of 512B
         {
             ok = findConsecutiveSpace(&allocatedIndex, &needed1024Blocks, &needed512Blocks);
             if(!ok)     // unavailability on 4KB block
             {
                 needed512Blocks = 0;
-                needed1024Blocks = (totalSpaceNeeded % 2) ? (totalSpaceNeeded/2) + 1 :
-                                    totalSpaceNeeded/2;  // allocate multiples of 1024B
+                needed1024Blocks = (totalSpaceNeeded % 2) ? (totalSpaceNeeded / 2) + 1 :
+                                    (totalSpaceNeeded / 2);  // allocate multiples of 1024B
                 ok = findConsecutiveSpace(&allocatedIndex, &needed1024Blocks, &needed512Blocks);
             }
         }
@@ -691,15 +781,167 @@ void* malloc_from_heap(uint32_t sizeInBytes)
 
     if(ok)
     {
-        uint32_t regionAddr, subregionAddr;
-        getMallocAddr(&regionAddr, &subregionAddr, allocatedIndex);
-        addrPtr = (void*)(regionAddr + subregionAddr);
+        uint16_t subregionAddr, regionAddr;
+        getMallocAddr(&subregionAddr, &regionAddr, allocatedIndex);
+        addrPtr = (void*)(HEAP_ADDRESS + regionAddr + subregionAddr);
+
         return addrPtr;
     }
     else    // sizeInBytes = 0
     {
         return NULL;
     }
+}
+
+void allowFlashAccess()
+{
+    // set region number (0 - 7)
+    NVIC_MPU_NUMBER_R = 0x0;
+    // set region base address (N=log2(Size)) and let it use MPUNUMBER (0<<4)
+        // region 0 : 0x00000000 - 0x00040000 , 18 = log2(256KB)
+    NVIC_MPU_BASE_R = (0x00 << 18) | (0 << 4) | (0 << 0);
+    // set region to allow processor to fetch in exception, +r+w both user and privilege,
+        // (tex-s-c-b) see pg.130, all sub-regions enable, size encoding pg.92 (N-1), enable the region
+    NVIC_MPU_ATTR_R = (0 << 28) | (0b011 << 24) | (0b000 << 19) | (0 << 18) | (1 << 17) | (0 << 16) |
+                        (0x00 << 8) | (0x11 << 1) | NVIC_MPU_ATTR_ENABLE;
+}
+
+void allowPeripheralAccess()
+{
+    // set region number (0 - 7)
+    NVIC_MPU_NUMBER_R = 0x1;
+    // set region base address (N=log2(Size)) and let it use MPUNUMBER (0<<4)
+        // region 0 : 0x40000000 - 0x5FFFFFFF , 28 = log2(512MB)
+    NVIC_MPU_BASE_R = (0x4 << 28) | (0 << 4) | (0 << 0);
+    // set region to allow processor to fetch in exception, +r+w both user and privilege,
+        // (tex-s-c-b) see pg.130, all sub-regions enable, size encoding pg.92 (N-1), enable the region
+    NVIC_MPU_ATTR_R = (0 << 28) | (0b011 << 24) | (0b000 << 19) | (1 << 18) | (0 << 17) | (1 << 16) |
+                        (0x00 << 8) | (0x1B << 1) | NVIC_MPU_ATTR_ENABLE;
+}
+
+void steupSramAccess()
+{
+    // 4KB OS Kernel
+    // set region number (0 - 7)
+    NVIC_MPU_NUMBER_R = 0x2;
+    // set region base address (N=log2(Size)) and let it use MPUNUMBER (0<<4)
+        // region 0 : 0x20000000 - 0x20000FFF , 12 = log2(4KB)
+    NVIC_MPU_BASE_R = (0x20000 << 12) | (0 << 4) | (0 << 0);
+    // set region to allow processor to fetch in exception, -r-w user and +r+w privilege,
+        // (tex-s-c-b) see pg.130, all sub-regions enable, size encoding pg.92 (N-1), enable the region
+    NVIC_MPU_ATTR_R = (0 << 28) | (0b011 << 24) | (0b000 << 19) | (1 << 18) | (1 << 17) | (0 << 16) |
+                        (0xFF << 8) | (0xB << 1) | NVIC_MPU_ATTR_ENABLE;
+
+    // Heap for threads
+    // set region number (0 - 7)
+    NVIC_MPU_NUMBER_R = 0x3;
+    // set region base address (N=log2(Size)) and let it use MPUNUMBER (0<<4)
+        // region 0 : 0x20001000 - 0x20001FFF , 12 = log2(4KB)
+    NVIC_MPU_BASE_R = (0x20001 << 12) | (0 << 4) | (0 << 0);
+    // set region to allow processor to fetch in exception, -r-w user and +r+w privilege,
+        // (tex-s-c-b) see pg.130, all sub-regions disable, size encoding pg.92 (N-1), enable the region
+    NVIC_MPU_ATTR_R = (0 << 28) | (0b011 << 24) | (0b000 << 19) | (1 << 18) | (1 << 17) | (0 << 16) |
+                        (0xFF << 8) | (0xB << 1) | NVIC_MPU_ATTR_ENABLE;
+
+    // set region number (0 - 7)
+    NVIC_MPU_NUMBER_R = 0x4;
+    // set region base address (N=log2(Size)) and let it use MPUNUMBER (0<<4)
+        // region 0 : 0x20002000 - 0x20003FFF , 13 = log2(8KB)
+    NVIC_MPU_BASE_R = (0x10001 << 13) | (0 << 4) | (0 << 0);
+    // set region to allow processor to fetch in exception, -r-w user and +r+w privilege,
+        // (tex-s-c-b) see pg.130, all sub-regions disable, size encoding pg.92 (N-1), enable the region
+    NVIC_MPU_ATTR_R = (0 << 28) | (0b011 << 24) | (0b000 << 19) | (1 << 18) | (1 << 17) | (0 << 16) |
+                        (0xFF << 8) | (0xC << 1) | NVIC_MPU_ATTR_ENABLE;
+
+    // set region number (0 - 7)
+    NVIC_MPU_NUMBER_R = 0x5;
+    // set region base address (N=log2(Size)) and let it use MPUNUMBER (0<<4)
+        // region 0 : 0x20004000 - 0x20004FFF , 12 = log2(4KB)
+    NVIC_MPU_BASE_R = (0x20004 << 12) | (0 << 4) | (0 << 0);
+    // set region to allow processor to fetch in exception, -r-w user and +r+w privilege,
+        // (tex-s-c-b) see pg.130, all sub-regions disable, size encoding pg.92 (N-1), enable the region
+    NVIC_MPU_ATTR_R = (0 << 28) | (0b011 << 24) | (0b000 << 19) | (1 << 18) | (1 << 17) | (0 << 16) |
+                        (0xFF << 8) | (0xB << 1) | NVIC_MPU_ATTR_ENABLE;
+
+    // set region number (0 - 7)
+    NVIC_MPU_NUMBER_R = 0x6;
+    // set region base address (N=log2(Size)) and let it use MPUNUMBER (0<<4)
+        // region 0 : 0x20005000 - 0x20005FFF , 12 = log2(4KB)
+    NVIC_MPU_BASE_R = (0x20005 << 12) | (0 << 4) | (0 << 0);
+    // set region to allow processor to fetch in exception, -r-w user and +r+w privilege,
+        // (tex-s-c-b) see pg.130, all sub-regions disable, size encoding pg.92 (N-1), enable the region
+    NVIC_MPU_ATTR_R = (0 << 28) | (0b011 << 24) | (0b000 << 19) | (1 << 18) | (1 << 17) | (0 << 16) |
+                        (0xFF << 8) | (0xB << 1) | NVIC_MPU_ATTR_ENABLE;
+
+    // set region number (0 - 7)
+    NVIC_MPU_NUMBER_R = 0x7;
+    // set region base address (N=log2(Size)) and let it use MPUNUMBER (0<<4)
+        // region 0 : 0x20006000 - 0x20007FFF , 13 = log2(8KB)
+    NVIC_MPU_BASE_R = (0x10003 << 13) | (0 << 4) | (0 << 0);
+    // set region to allow processor to fetch in exception, -r-w user and +r+w privilege,
+        // (tex-s-c-b) see pg.130, all sub-regions disable, size encoding pg.92 (N-1), enable the region
+    NVIC_MPU_ATTR_R = (0 << 28) | (0b011 << 24) | (0b000 << 19) | (1 << 18) | (1 << 17) | (0 << 16) |
+                        (0xFF << 8) | (0xC << 1) | NVIC_MPU_ATTR_ENABLE;
+}
+
+void sramRestrictedTest()
+{
+    uint32_t* p = malloc_from_heap(1024);
+
+    // enable MPU background region, only privilege access
+    NVIC_MPU_CTRL_R |= NVIC_MPU_CTRL_PRIVDEFEN;
+    allowFlashAccess();
+    allowPeripheralAccess();
+    steupSramAccess();
+    // enable MPU
+    NVIC_MPU_CTRL_R |= NVIC_MPU_CTRL_ENABLE;
+
+    uint64_t srdBitMask = createNoSramAccessMask();
+    addSramAccessWindow(&srdBitMask, p, 1024);
+    applySramAccessMask(srdBitMask);
+
+    // have to enable OS kernel because variable p location is in PSP which is in OS
+    NVIC_MPU_ATTR_R &= ~NVIC_MPU_ATTR_ENABLE;
+    NVIC_MPU_NUMBER_R = 0x2;
+    NVIC_MPU_ATTR_R &= 0xFFFF00FF;
+    NVIC_MPU_ATTR_R |= NVIC_MPU_ATTR_ENABLE;
+
+    // write under privilege mode
+    *p = 5;
+    // switch to user mode
+    goUserMode();
+    // write in user
+    //p++;
+    *p = 10;
+    // write outside of access region
+    --p;
+    p += 0x400;
+    *p = 10;
+}
+
+void sramAllAccessTest()
+{
+    // enable MPU background region, only privilege access
+    NVIC_MPU_CTRL_R |= NVIC_MPU_CTRL_PRIVDEFEN;
+    allowFlashAccess();
+    allowPeripheralAccess();
+    steupSramAccess();
+    // enable MPU
+    NVIC_MPU_CTRL_R |= NVIC_MPU_CTRL_ENABLE;
+
+    uint64_t srdBitMask = createNoSramAccessMask();
+    uint32_t addr = 0x20000000;
+    uint32_t* addrPtr = (uint32_t *)addr;
+    addSramAccessWindow(&srdBitMask, addrPtr, 32768);
+    applySramAccessMask(srdBitMask);
+
+    // read from flash under privilege
+    uint32_t* dataPtr = (uint32_t*)(0x20000000);
+    uint32_t data = *(dataPtr);
+    // switch to unprivileged mode
+    goUserMode();
+    // access word from OS under USER
+    uint32_t dataCopy = *(dataPtr);
 }
 
 /**
@@ -709,12 +951,16 @@ int main(void)
 {
     // initialize hardware
     initHw();
+    uint32_t* pspPtr = (uint32_t*)PSP_ADDRESS;
+    setPsp(pspPtr);
+    // set ASP bit in CONTROL register
+    goThreadMode();
+    sramRestrictedTest();
+
 /*
     // temporary PSP assigned
     uint32_t* pspPtr = (uint32_t*)PSP_ADDRESS;
     setPsp(pspPtr);
-    // set ASP bit in CONTROL register
-    setControlReg();
     // trigger bus fault
     triggerBusFault();
     // trigger usage fault

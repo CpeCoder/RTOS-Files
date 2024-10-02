@@ -17,10 +17,11 @@
 ;-----------------------------------------------------------------------------
 
    .def setPsp
-   .def setControlReg
+   .def goThreadMode
    .def getPsp
    .def getMsp
    .def getStackDump
+   .def goUserMode
 
 ;-----------------------------------------------------------------------------
 ; Register values and large immediate values
@@ -33,7 +34,7 @@ setPsp:
 	MSR PSP, R0		; an address is passed in R0, and PSP is set to it
 	BX LR
 
-setControlReg:
+goThreadMode:
 	MRS R0, CONTROL		; get CONTROL reg value, this way keep previous data
 	ORR R0, #2			; assign value to r0 respect with to CONTROL reg as 1 to ASP bit
 	MSR CONTROL, R0		; moves the r0 to CONTROL special reg
@@ -74,3 +75,9 @@ getStackDump:
     LDR R2, [R1, #28] 		; Load value of xPSR from stack
     STR R2, [R0, R3]  		; Store xPSR value at regData[7]
     BX LR
+
+goUserMode:
+	MRS R0, CONTROL
+	ORR R0, #1
+	MSR CONTROL, R0
+	BX LR

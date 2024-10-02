@@ -61,7 +61,7 @@ void hardFaultISR()
     NVIC_SYS_HND_CTRL_R &= ~NVIC_SYS_HND_CTRL_BUSP;
     // turn on bus fault
     NVIC_SYS_HND_CTRL_R |= NVIC_SYS_HND_CTRL_BUS;
-    //while(1){}
+    while(1){}
 }
 
 void mpuFaultISR()
@@ -162,7 +162,7 @@ void triggerMpuFault()
     // set region to allow processor to fetch in exception, read-only both user and privilege,
         // (tex-s-c-b) see pg.130, no sub-regions, size encoding pg.92, enable the region
     NVIC_MPU_ATTR_R |= (0 << 28) | (0x7 << 24) | (0 << 19) | (1 << 18) | (1 << 17) | (0 << 16) |
-                        (0 << 8) | (0x09 << 1) | NVIC_MPU_ATTR_ENABLE;
+                        (0x00 << 8) | (0x09 << 1) | NVIC_MPU_ATTR_ENABLE;
     // default memory map as background and enable MPU
     NVIC_MPU_CTRL_R |= NVIC_MPU_CTRL_PRIVDEFEN | NVIC_MPU_CTRL_ENABLE;
 

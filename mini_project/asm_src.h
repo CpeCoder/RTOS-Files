@@ -17,10 +17,11 @@
 // Subroutines
 //-----------------------------------------------------------------------------
 extern void setPsp(uint32_t* pspAddr);
-extern void setControlReg(void);
+extern void goThreadMode(void);
 
 extern uint32_t getPsp();
 extern uint32_t getMsp();
 extern void getStackDump(uint32_t* arr, uint32_t psp);
+extern void goUserMode();
 
 #endif
