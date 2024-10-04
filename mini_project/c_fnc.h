@@ -20,5 +20,6 @@
 bool strCmp(const char str1[], const char str2[]);
 char* numToStr(uint32_t num, char str[]);
 char* uint32ToHexString(uint32_t* value, char *hexString);
+uint32_t hexStringToUint32(char* hexstring);
 
 #endif

@@ -12,7 +12,9 @@ ORDERED_OBJS += \
 "./c_fnc.obj" \
 "./clock.obj" \
 "./fault_handlers.obj" \
+"./gpio.obj" \
 "./mini_project.obj" \
+"./nvic.obj" \
 "./tm4c123gh6pm_startup_ccs.obj" \
 "./uart0.obj" \
 "../tm4c123gh6pm.cmd" \
@@ -145,8 +147,8 @@ mini_project.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 # Other Targets
 clean:
 	-$(RM) $(EXE_OUTPUTS__QUOTED)
-	-$(RM) "asm_src.obj" "c_fnc.obj" "clock.obj" "fault_handlers.obj" "mini_project.obj" "tm4c123gh6pm_startup_ccs.obj" "uart0.obj" 
-	-$(RM) "c_fnc.d" "clock.d" "fault_handlers.d" "mini_project.d" "tm4c123gh6pm_startup_ccs.d" "uart0.d" 
+	-$(RM) "asm_src.obj" "c_fnc.obj" "clock.obj" "fault_handlers.obj" "gpio.obj" "mini_project.obj" "nvic.obj" "tm4c123gh6pm_startup_ccs.obj" "uart0.obj" 
+	-$(RM) "c_fnc.d" "clock.d" "fault_handlers.d" "gpio.d" "mini_project.d" "nvic.d" "tm4c123gh6pm_startup_ccs.d" "uart0.d" 
 	-$(RM) "asm_src.d" 
 	-@echo 'Finished clean'
 	-@echo ' '

@@ -52,7 +52,7 @@ char* numToStr(uint32_t num, char str[])
     return str;
 }
 
-char* uint32ToHexString(uint32_t* value, char *hexString)
+char* uint32ToHexString(uint32_t* value, char* hexString)
 {
     char *hexDigits = "0123456789ABCDEF";
     int8_t i;
@@ -65,4 +65,32 @@ char* uint32ToHexString(uint32_t* value, char *hexString)
     // Null-terminate the string
     hexString[8] = '\0';
     return hexString;
+}
+
+uint32_t hexStringToUint32(char* hexString)
+{
+    uint32_t value = 0;
+    uint8_t i;
+    // Convert each character in the hex string to its corresponding uint32_t value
+    for (i = 0; i < 8; i++)
+    {
+        char hexChar = hexString[i];
+        uint32_t digitValue;
+
+        if (hexChar >= '0' && hexChar <= '9')
+        {
+            digitValue = hexChar - '0';
+        }
+        else if (hexChar >= 'A' && hexChar <= 'F')
+        {
+            digitValue = hexChar - 'A' + 10;
+        }
+        else if (hexChar >= 'a' && hexChar <= 'f')
+        {
+            digitValue = hexChar - 'a' + 10;
+        }
+        value = (value << 4) | digitValue; // Shift left and add the new digit
+    }
+
+    return value;
 }

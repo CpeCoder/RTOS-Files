@@ -4,6 +4,7 @@
 #include "asm_src.h"
 #include "uart0.h"
 #include "c_fnc.h"
+#include "gpio.h"
 #include "tm4c123gh6pm.h"
 
 void usageFaultISR()
@@ -11,9 +12,9 @@ void usageFaultISR()
     putsUart0("\nUsage fault in process pid\n");
     // turn off usage pending bit
     NVIC_SYS_HND_CTRL_R &= ~NVIC_SYS_HND_CTRL_USAGEP;
-    // disable faulting with divisor of 0
-    NVIC_CFG_CTRL_R &= ~NVIC_CFG_CTRL_DIV0;
-    //while(1){}
+    // disable faulting with divisor of 0, don't have to
+    //NVIC_CFG_CTRL_R &= ~NVIC_CFG_CTRL_DIV0;
+    while(1){}
 }
 
 void busFaultISR()
@@ -21,7 +22,7 @@ void busFaultISR()
     putsUart0("\nBus fault in process pid\n");
     // turn off bus pending bit
     NVIC_SYS_HND_CTRL_R &= ~NVIC_SYS_HND_CTRL_BUSP;
-    //while(1){}
+    while(1){}
 }
 
 void hardFaultISR()
@@ -100,7 +101,7 @@ void mpuFaultISR()
     putcUart0('\n');
 
     // turn off MPU
-    NVIC_MPU_CTRL_R &= ~(NVIC_MPU_CTRL_PRIVDEFEN | NVIC_MPU_CTRL_ENABLE);
+    //NVIC_MPU_CTRL_R &= ~(NVIC_MPU_CTRL_PRIVDEFEN | NVIC_MPU_CTRL_ENABLE);
     // turn off MPU pending bit
     NVIC_SYS_HND_CTRL_R &= ~(NVIC_SYS_HND_CTRL_MEMP);
     // sets pendSV pending state
@@ -116,13 +117,13 @@ void pendSvISR()
         NVIC_FAULT_STAT_R &= ~(NVIC_FAULT_STAT_IERR | NVIC_FAULT_STAT_DERR);
         putsUart0("called from MPU\n");
     }
-    //while(1){}
+    while(1){}
 }
 
 void triggerBusFault()
 {
     // enables bus fault
-    NVIC_SYS_HND_CTRL_R |= NVIC_SYS_HND_CTRL_BUS;
+    //NVIC_SYS_HND_CTRL_R |= NVIC_SYS_HND_CTRL_BUS;
     // writing on reserved memory map address, causes Bus Fault
     uint32_t regAdd = 0x40014000;
     uint32_t* resvReg = (uint32_t*)regAdd;
@@ -134,7 +135,7 @@ void triggerUsageFault()
     // enable faulting with divisor of 0
     NVIC_CFG_CTRL_R |= NVIC_CFG_CTRL_DIV0;
     // enables usage fault
-    NVIC_SYS_HND_CTRL_R |= NVIC_SYS_HND_CTRL_USAGE;
+    //NVIC_SYS_HND_CTRL_R |= NVIC_SYS_HND_CTRL_USAGE;
 
     uint8_t divisor = 0;
     uint8_t dividend = 1;
@@ -167,7 +168,7 @@ void triggerMpuFault()
     NVIC_MPU_CTRL_R |= NVIC_MPU_CTRL_PRIVDEFEN | NVIC_MPU_CTRL_ENABLE;
 
     // enable memory management fault
-    NVIC_SYS_HND_CTRL_R |= NVIC_SYS_HND_CTRL_MEM;
+    //NVIC_SYS_HND_CTRL_R |= NVIC_SYS_HND_CTRL_MEM;
 
     uint32_t readOnlyAdds = 0x20001500;
     uint32_t* readOnlyPtr = (uint32_t*) readOnlyAdds;

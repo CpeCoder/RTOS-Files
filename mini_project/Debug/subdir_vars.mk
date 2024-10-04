@@ -13,7 +13,9 @@ C_SRCS += \
 ../c_fnc.c \
 ../clock.c \
 ../fault_handlers.c \
+../gpio.c \
 ../mini_project.c \
+../nvic.c \
 ../tm4c123gh6pm_startup_ccs.c \
 ../uart0.c 
 
@@ -24,7 +26,9 @@ C_DEPS += \
 ./c_fnc.d \
 ./clock.d \
 ./fault_handlers.d \
+./gpio.d \
 ./mini_project.d \
+./nvic.d \
 ./tm4c123gh6pm_startup_ccs.d \
 ./uart0.d 
 
@@ -33,7 +37,9 @@ OBJS += \
 ./c_fnc.obj \
 ./clock.obj \
 ./fault_handlers.obj \
+./gpio.obj \
 ./mini_project.obj \
+./nvic.obj \
 ./tm4c123gh6pm_startup_ccs.obj \
 ./uart0.obj 
 
@@ -42,7 +48,9 @@ OBJS__QUOTED += \
 "c_fnc.obj" \
 "clock.obj" \
 "fault_handlers.obj" \
+"gpio.obj" \
 "mini_project.obj" \
+"nvic.obj" \
 "tm4c123gh6pm_startup_ccs.obj" \
 "uart0.obj" 
 
@@ -50,7 +58,9 @@ C_DEPS__QUOTED += \
 "c_fnc.d" \
 "clock.d" \
 "fault_handlers.d" \
+"gpio.d" \
 "mini_project.d" \
+"nvic.d" \
 "tm4c123gh6pm_startup_ccs.d" \
 "uart0.d" 
 
@@ -64,7 +74,9 @@ C_SRCS__QUOTED += \
 "../c_fnc.c" \
 "../clock.c" \
 "../fault_handlers.c" \
+"../gpio.c" \
 "../mini_project.c" \
+"../nvic.c" \
 "../tm4c123gh6pm_startup_ccs.c" \
 "../uart0.c" 
 

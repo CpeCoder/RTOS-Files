@@ -17,6 +17,7 @@ fault_handlers.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.L
 fault_handlers.obj: ../c_fnc.h
 fault_handlers.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdio.h
 fault_handlers.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdarg.h
+fault_handlers.obj: ../gpio.h
 fault_handlers.obj: ../tm4c123gh6pm.h
 
 ../fault_handlers.c:
@@ -52,6 +53,8 @@ fault_handlers.obj: ../tm4c123gh6pm.h
 /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdio.h:
 
 /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdarg.h:
+
+../gpio.h:
 
 ../tm4c123gh6pm.h:
 

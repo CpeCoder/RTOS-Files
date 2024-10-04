@@ -19,6 +19,8 @@ mini_project.obj: ../clock.h
 mini_project.obj: ../fault_handlers.h
 mini_project.obj: ../asm_src.h
 mini_project.obj: ../c_fnc.h
+mini_project.obj: ../gpio.h
+mini_project.obj: ../nvic.h
 mini_project.obj: ../tm4c123gh6pm.h
 
 ../mini_project.c:
@@ -58,6 +60,10 @@ mini_project.obj: ../tm4c123gh6pm.h
 ../asm_src.h:
 
 ../c_fnc.h:
+
+../gpio.h:
+
+../nvic.h:
 
 ../tm4c123gh6pm.h:
 
