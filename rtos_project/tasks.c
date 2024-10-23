@@ -101,7 +101,7 @@ void idle(void)
     while(true)
     {
         setPinValue(ORANGE_LED, 1);
-        waitMicrosecond(1000);
+        waitMicrosecond(250000);        // 1000
         setPinValue(ORANGE_LED, 0);
         yield();
     }
@@ -111,8 +111,13 @@ void flash4Hz(void)
 {
     while(true)
     {
+        setPinValue(YELLOW_LED, 1);
+        waitMicrosecond(250000);
+        setPinValue(YELLOW_LED, 0);
+        yield();
+        /*
         setPinValue(GREEN_LED, !getPinValue(GREEN_LED));
-        sleep(125);
+        sleep(125);*/
     }
 }
 
@@ -120,10 +125,14 @@ void oneshot(void)
 {
     while(true)
     {
-        wait(flashReq);
+        setPinValue(GREEN_LED, 1);
+        waitMicrosecond(250000);
+        setPinValue(GREEN_LED, 0);
+        yield();
+/*        wait(flashReq);
         setPinValue(YELLOW_LED, 1);
         sleep(1000);
-        setPinValue(YELLOW_LED, 0);
+        setPinValue(YELLOW_LED, 0);*/
     }
 }
 
@@ -239,10 +248,14 @@ void important(void)
 {
     while(true)
     {
-        lock(resource);
+        setPinValue(RED_LED, 1);
+        waitMicrosecond(250000);        // 1000
+        setPinValue(RED_LED, 0);
+        yield();
+/*        lock(resource);
         setPinValue(BLUE_LED, 1);
         sleep(1000);
         setPinValue(BLUE_LED, 0);
-        unlock(resource);
+        unlock(resource);*/
     }
 }

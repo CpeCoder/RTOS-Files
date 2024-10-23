@@ -23,7 +23,9 @@
    .def getStackDump
    .def goUserMode
    .def runFn
-   .def restoreThreadRegs
+   .def restoreRegs
+   .def storeRegs
+   .def setExecpLr
 
 ;-----------------------------------------------------------------------------
 ; Register values and large immediate values
@@ -98,8 +100,8 @@ runFn:
 	STR R2, [R0, #-4]!				; PSR gets store 4 bytes below addr in R0 and addr updates in R0
 	POP {R2}						; restore values of regs
 	STR R1, [R0, #-4]!				; PC place (value in R1) gets store 4 bytes below addr in R0 and addr updates in R0
-	STMDB R0, {LR,R12,R0-R3}		; stores reglist to R0 address, decrements first
-	SUB R0, #24						; decrement address, for the stored register
+	STMDB R0, {LR,R12,R0-R3}		; stores reglist to R0 address, decrements first, cannnot write-back due to RO being address base and in reglist
+	SUB R0, #24						; decrement address, for the stored register, 6 regs in list so 6*4=24 (4 byte per word)
 	PUSH {LR}						; store way-back address
 	LDR LR, execResultValue			; load LR with execute_result of thread PSP value
 	STMDB R0!, {LR,R4-R11}			; stores reglist to R0 address, decrements first and writes back the updated address
@@ -109,8 +111,23 @@ runFn:
 ;	SUB R1, R0, #4					; expand stack to push R0 value while preserving R0 value
 ;	STR R0, [R1]					; store address (R0) points to last R11 pushed
 
-restoreThreadRegs:
+restoreRegs:
+	PUSH {LR}				; need this function to return updated sp, so can not BX 0xFFFFFFFD
 	MRS R0, PSP				; gets stack continous address
 	LDM R0!, {LR,R4-R11}	; load reglist to R0 address, increment after and writes back the updated address
 	MSR PSP, R0				; update the stack after POP (LDR)
+	POP {LR}				; restore LR value
+	BX LR
+
+storeRegs:
+	PUSH {LR}						; store way-back address
+	MRS R0, PSP						; gets stack continous address
+	LDR LR, execResultValue			; load LR with execute_result of thread PSP value
+	STMDB R0!, {LR,R4-R11}			; stores reglist to R0 address, decrements first and writes back the updated address
+	MSR PSP, R0						; sets stack continous address
+	POP {LR}						; restore LR value
+	BX LR
+
+setExecpLr:
+	LDR LR, execResultValue			; load LR with execute_result of thread PSP valu/e
 	BX LR

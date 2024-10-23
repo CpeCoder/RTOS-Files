@@ -13,6 +13,7 @@
 //-----------------------------------------------------------------------------
 
 #include <stdint.h>
+#include <stdio.h>
 #include "tm4c123gh6pm.h"
 #include "mm.h"
 #include "kernel.h"
@@ -58,7 +59,7 @@ uint8_t taskCount = 0;            // total number of valid tasks
 // control
 bool priorityScheduler = true;    // priority (true) or round-robin (false)
 bool priorityInheritance = false; // priority inheritance for mutexes
-bool preemption = true;          // preemption (true) or cooperative (false)
+bool preemption = false;          // preemption (true) or cooperative (false)
 
 // tcb
 #define NUM_PRIORITIES   16
@@ -137,6 +138,8 @@ uint8_t rtosScheduler(void)
 // fn set TMPL bit, and PC <= fn
 void startRtos(void)
 {
+    // enable Memory Protection Unit
+    NVIC_MPU_CTRL_R |= NVIC_MPU_CTRL_PRIVDEFEN | NVIC_MPU_CTRL_ENABLE;
     setPsp((uint32_t*)0x20008000);
     goThreadMode();         // switch to thread mode by setting ASP
     goUserMode();           // changes from privilege to un-privilege,  TMPL bit
@@ -206,6 +209,7 @@ void setThreadPriority(_fn fn, uint8_t priority)
 // REQUIRED: modify this function to yield execution back to scheduler using pendsv
 void yield(void)
 {
+    __asm(" SVC #1");
 }
 
 // REQUIRED: modify this function to support 1ms system timer
@@ -242,20 +246,47 @@ void systickIsr(void)
 
 // REQUIRED: in coop and preemptive, modify this function to add support for task switching
 // REQUIRED: process UNRUN and READY tasks differently
+//__attribute__((naked)), alternative solution to POP and PUSH at end and beginning of the function
+    // attribute naked tells GCC function should be generated without any prologue or epilogue code
 void pendSvIsr(void)
 {
-
+    __asm(" PUSH {LR}");                        // exception return value, changes on any fnc call so store it
+    tcb[taskCurrent].sp = storeRegs();          // stores R4-11 and LR, and updates psp and psp value
+    taskCurrent = rtosScheduler();
+    setPsp((uint32_t*)tcb[taskCurrent].sp);
+    applySramAccessMask(tcb[taskCurrent].srd);
+    restoreRegs();                              // restore r4-11 and updates psp
+    __asm(" POP {LR}");                         // load exception return value
 }
 
 // REQUIRED: modify this function to add support for the service call
 // REQUIRED: in preemptive code, add code to handle synchronization primitives
+//__attribute__((naked))
 void svCallIsr(void)
 {
-    taskCurrent = rtosScheduler();
-    setPsp((uint32_t*)tcb[taskCurrent].sp);
-    applySramAccessMask(tcb[taskCurrent].srd);
-    // enable Memory Protection Unit
-    NVIC_MPU_CTRL_R |= NVIC_MPU_CTRL_PRIVDEFEN | NVIC_MPU_CTRL_ENABLE;
-    restoreThreadRegs();
+    __asm(" PUSH {LR}");
+    // first add 6 to point at PC address and cast to uint8 pointer
+    uint8_t** pcPtr = (uint8_t**)(((uint32_t*)getPsp()) + 6);
+    // SVC half-word instruction, so decrement by 2 to point at immediate value (8b)
+    uint8_t imm = (uint8_t)(*(*pcPtr - 2));
+    switch(imm)
+    {
+    case 0:
+        taskCurrent = rtosScheduler();
+        setPsp((uint32_t*)tcb[taskCurrent].sp);
+        applySramAccessMask(tcb[taskCurrent].srd);
+        restoreRegs();
+        setExecpLr();   // does not return
+        break;
+    case 1:
+        // sets pendSV pending state
+        NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;
+        break;
+    }
+    __asm(" POP {LR}");
+
+/** next cmd is a problem because, GCC PUSH register(s) on fnc calls
+ ** but since fnc exits to 0xFFFFFFFD the stack keeps increasing on every isr run, leading to hard fault */
+    //setExecpLr();
 }
 

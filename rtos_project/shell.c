@@ -17,6 +17,7 @@
 #include "shell.h"
 #include "c_fnc.h"
 #include "uart0.h"
+#include "kernel.h"
 
 // REQUIRED: Add header files here for your strings functions, ...
 // data from UI
@@ -155,7 +156,7 @@ void shell(void)
                 }
             }
         }
-        //yeild();
+        yield();
     }
 }
 

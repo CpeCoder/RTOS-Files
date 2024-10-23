@@ -23,6 +23,7 @@ extern uint32_t getMsp();
 extern void getStackDump(uint32_t* arr, uint32_t psp);
 extern void goUserMode();
 extern void* runFn(void* sp, void* pc);
-extern void restoreThreadRegs();
-
+extern void restoreRegs();
+extern void* storeRegs();
+extern void setExecpLr();
 #endif

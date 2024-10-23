@@ -263,7 +263,7 @@ void setupSramAccess(void)
     // set region to allow processor to fetch in exception, +r+w user,
         // (tex-s-c-b) see pg.130, all sub-regions disable, size encoding pg.92 (N-1), enable the region
     NVIC_MPU_ATTR_R = (0 << 28) | (0b011 << 24) | (0b000 << 19) | (1 << 18) | (1 << 17) | (0 << 16) |
-                        (0xFF << 8) | (0xC << 1) | NVIC_MPU_ATTR_ENABLE;
+                        (0x7F << 8) | (0xC << 1) | NVIC_MPU_ATTR_ENABLE;
 }
 
 uint64_t createNoSramAccessMask(void)

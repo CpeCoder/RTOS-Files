@@ -18,6 +18,7 @@ shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/includ
 shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdio.h
 shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdarg.h
 shell.obj: ../uart0.h
+shell.obj: ../kernel.h
 
 ../shell.c:
 
@@ -54,4 +55,6 @@ shell.obj: ../uart0.h
 /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdarg.h:
 
 ../uart0.h:
+
+../kernel.h:
 
