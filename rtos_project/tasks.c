@@ -78,6 +78,12 @@ void initHw(void)
     // enable usage, bus, and memory management faults
     NVIC_CFG_CTRL_R |= NVIC_CFG_CTRL_DIV0;
     NVIC_SYS_HND_CTRL_R |= NVIC_SYS_HND_CTRL_USAGE | NVIC_SYS_HND_CTRL_BUS | NVIC_SYS_HND_CTRL_MEM;
+
+    // setup system timer
+    NVIC_ST_RELOAD_R  = 40e3 - 1;   // sysTick will 1 millisecond muti-shot timer
+    NVIC_ST_CURRENT_R = 0;          // W1C register, NOTE: current and reload are only 24 bit
+    // user system clock, enable interrupt, enable muti-shot (keeps reloading)
+    NVIC_ST_CTRL_R    = NVIC_ST_CTRL_CLK_SRC | NVIC_ST_CTRL_INTEN | NVIC_ST_CTRL_ENABLE;
 }
 
 // REQUIRED: add code to return a value from 0-63 indicating which of 6 PBs are pressed
@@ -101,7 +107,7 @@ void idle(void)
     while(true)
     {
         setPinValue(ORANGE_LED, 1);
-        waitMicrosecond(250000);        // 1000
+        waitMicrosecond(1000);
         setPinValue(ORANGE_LED, 0);
         yield();
     }
@@ -111,13 +117,8 @@ void flash4Hz(void)
 {
     while(true)
     {
-        setPinValue(YELLOW_LED, 1);
-        waitMicrosecond(250000);
-        setPinValue(YELLOW_LED, 0);
-        yield();
-        /*
         setPinValue(GREEN_LED, !getPinValue(GREEN_LED));
-        sleep(125);*/
+        sleep(125);
     }
 }
 
@@ -125,14 +126,10 @@ void oneshot(void)
 {
     while(true)
     {
-        setPinValue(GREEN_LED, 1);
-        waitMicrosecond(250000);
-        setPinValue(GREEN_LED, 0);
-        yield();
-/*        wait(flashReq);
+        wait(flashReq);
         setPinValue(YELLOW_LED, 1);
         sleep(1000);
-        setPinValue(YELLOW_LED, 0);*/
+        setPinValue(YELLOW_LED, 0);
     }
 }
 
@@ -248,14 +245,10 @@ void important(void)
 {
     while(true)
     {
-        setPinValue(RED_LED, 1);
-        waitMicrosecond(250000);        // 1000
-        setPinValue(RED_LED, 0);
-        yield();
-/*        lock(resource);
+        lock(resource);
         setPinValue(BLUE_LED, 1);
         sleep(1000);
         setPinValue(BLUE_LED, 0);
-        unlock(resource);*/
+        unlock(resource);
     }
 }

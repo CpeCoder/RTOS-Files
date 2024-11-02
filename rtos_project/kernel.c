@@ -44,6 +44,15 @@ typedef struct _semaphore
 } semaphore;
 semaphore semaphores[MAX_SEMAPHORES];
 
+// Service Call (SVC) types
+#define START  0                  // starts the first task
+#define YIELD  1                  // sets pendSV to switch task if any ready
+#define SLEEP  2                  // disables a task for x millisecond
+#define LOCK   3                  // starts using mutex
+#define UNLOCK 4                  // frees mutex
+#define WAIT   5                  // use semaphore access
+#define POST   6                  // free semaphore
+
 // task states
 #define STATE_INVALID           0 // no task
 #define STATE_STOPPED           1 // stopped, all memory freed
@@ -59,7 +68,7 @@ uint8_t taskCount = 0;            // total number of valid tasks
 // control
 bool priorityScheduler = true;    // priority (true) or round-robin (false)
 bool priorityInheritance = false; // priority inheritance for mutexes
-bool preemption = false;          // preemption (true) or cooperative (false)
+bool preemption = true;           // preemption (true) or cooperative (false)
 
 // tcb
 #define NUM_PRIORITIES   16
@@ -71,7 +80,7 @@ struct _tcb
     void *sp;                      // current stack pointer
     uint8_t priority;              // 0=highest
     uint8_t currentPriority;       // 0=highest (needed for pi)
-    uint32_t ticks;                // ticks until sleep completebaseAddrValue
+    uint32_t ticks;                // ticks until sleep complete
     uint64_t srd;                  // MPU subregion disable bits
     char name[16];                 // name of task used in ps command
     uint8_t mutex;                 // index of the mutex in use or blocking the thread
@@ -89,6 +98,7 @@ bool initMutex(uint8_t mutex)
     {
         mutexes[mutex].lock = false;
         mutexes[mutex].lockedBy = 0;
+        mutexes[mutex].queueSize = 0;
     }
     return ok;
 }
@@ -99,6 +109,7 @@ bool initSemaphore(uint8_t semaphore, uint8_t count)
     if (ok)
     {
         semaphores[semaphore].count = count;
+        semaphores[semaphore].queueSize = 0;
     }
     return ok;
 }
@@ -122,7 +133,27 @@ uint8_t rtosScheduler(void)
 {
     bool ok;
     static uint8_t task = 0xFF;
+    static uint8_t priorityTaskCounter[16] = {0};
+    uint8_t i, j, priority = 0;     // always start from priority 0
     ok = false;
+    while (!ok)
+    {
+        i = priorityTaskCounter[priority];  // start from the last checked task at the current priority.
+
+        for (j = 0; j < taskCount; j++)
+        {
+            if (tcb[i].priority == priority && tcb[i].state == STATE_READY)
+            {
+                ok = true;                              // ready task is found.
+                priorityTaskCounter[priority] = i;      // save the index for next scheduling cycle.
+                return i;                               // return the index of the ready task.
+            }
+            i = (i + 1) % taskCount;        // move to the next task.
+        }
+        // if no ready task is found at the current priority, go to the next priority.
+        priority = (priority + 1) % NUM_PRIORITIES;
+    }
+
     while (!ok)
     {
         task++;
@@ -142,7 +173,7 @@ void startRtos(void)
     NVIC_MPU_CTRL_R |= NVIC_MPU_CTRL_PRIVDEFEN | NVIC_MPU_CTRL_ENABLE;
     setPsp((uint32_t*)0x20008000);
     goThreadMode();         // switch to thread mode by setting ASP
-    goUserMode();           // changes from privilege to un-privilege,  TMPL bit
+    //goUserMode();           // changes from privilege to un-privilege,  TMPL bit
     __asm(" SVC #0");       // service call, requesting kernel to do privilege task
 }
 
@@ -216,32 +247,48 @@ void yield(void)
 // execution yielded back to scheduler until time elapses using pendsv
 void sleep(uint32_t tick)
 {
+    __asm(" SVC #2");
 }
 
 // REQUIRED: modify this function to lock a mutex using pendsv
 void lock(int8_t mutex)
 {
+    __asm(" SVC #3");
 }
 
 // REQUIRED: modify this function to unlock a mutex using pendsv
 void unlock(int8_t mutex)
 {
+    __asm(" SVC #4");
 }
 
 // REQUIRED: modify this function to wait a semaphore using pendsv
 void wait(int8_t semaphore)
 {
+    __asm(" SVC #5");
 }
 
 // REQUIRED: modify this function to signal a semaphore is available using pendsv
 void post(int8_t semaphore)
 {
+    __asm(" SVC #6");
 }
 
 // REQUIRED: modify this function to add support for the system timer
 // REQUIRED: in preemptive code, add code to request task switch
 void systickIsr(void)
 {
+    uint8_t i = 0;
+    for (i = 0; i < taskCount; i++)
+    {
+        if (tcb[i].state == STATE_DELAYED)
+        {
+            if (tcb[i].ticks != 0)          // task ticker
+                (tcb[i].ticks)--;
+            if (tcb[i].ticks == 0)          // timer expired, do task
+                tcb[i].state = STATE_READY;
+        }
+    }
 }
 
 // REQUIRED: in coop and preemptive, modify this function to add support for task switching
@@ -265,24 +312,115 @@ void pendSvIsr(void)
 void svCallIsr(void)
 {
     __asm(" PUSH {LR}");
-    // first add 6 to point at PC address and cast to uint8 pointer
-    uint8_t** pcPtr = (uint8_t**)(((uint32_t*)getPsp()) + 6);
+    uint32_t* psp = (uint32_t*)getPsp();
+    uint32_t r0 = *psp;
+    // first add 6 to point at PC address and cast to uint8 double pointer
+    uint8_t** pcPtr = (uint8_t**)(psp + 6);
     // SVC half-word instruction, so decrement by 2 to point at immediate value (8b)
     uint8_t imm = (uint8_t)(*(*pcPtr - 2));
     switch(imm)
     {
-    case 0:
+    case START:
         taskCurrent = rtosScheduler();
         setPsp((uint32_t*)tcb[taskCurrent].sp);
         applySramAccessMask(tcb[taskCurrent].srd);
         restoreRegs();
         setExecpLr();   // does not return
         break;
-    case 1:
+    case YIELD:
         // sets pendSV pending state
         NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;
         break;
+    case SLEEP:
+        tcb[taskCurrent].ticks = r0;                    // r0 holds sleep time (ms)
+        tcb[taskCurrent].state = STATE_DELAYED;
+        NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;       // task switch
+        break;
+    case LOCK:
+        // the value of R0, which mutex is being used - always be 0
+        if (r0 >= MAX_MUTEXES)                  // requested non-exist resource
+            break;
+
+        if (!mutexes[r0].lock)                  // mutex is available
+        {
+            tcb[taskCurrent].mutex = r0;
+            mutexes[r0].lock = true;            // lock mutex
+            mutexes[r0].lockedBy = taskCurrent; // store who is locking, only that can free mutex
+        }
+        else
+        {
+            if (mutexes[r0].queueSize < MAX_MUTEX_QUEUE_SIZE)
+            {
+                tcb[taskCurrent].mutex = r0;                                   // stores which mutex block the task
+                tcb[taskCurrent].state = STATE_BLOCKED_MUTEX;                  // stop task until resource is available
+                // put task in queue, and update queue
+                mutexes[r0].processQueue[mutexes[r0].queueSize++] = taskCurrent;
+            }
+            NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;          // task switch, can't let task run with resource
+        }
+        break;
+    case UNLOCK:
+        // the value of R0, defines which mutex is being used - always be 0
+        if (r0 >= MAX_MUTEXES)                  // accessing non-exist resource
+            break;
+
+        if (mutexes[r0].lockedBy == taskCurrent)
+        {
+            mutexes[r0].lock = false;           // unlock resource
+            if (mutexes[r0].queueSize > 0)      // if any task in queue for resource, then lock it again
+            {
+                uint8_t i, nextTaskId = mutexes[r0].processQueue[0];
+                tcb[nextTaskId].state = STATE_READY;
+                tcb[nextTaskId].mutex = r0;
+                mutexes[r0].lock = true;                        // lock mutex
+                mutexes[r0].lockedBy = nextTaskId;              // store who is locking, only that can free mutex
+                mutexes[r0].queueSize--;
+                for (i = 0; i < mutexes[r0].queueSize; i++)     // update the queue, shift the task down by 1 index
+                    mutexes[r0].processQueue[i] = mutexes[r0].processQueue[i + 1];
+            }
+        }
+        else        // unprotected access, kill pid
+        {
+            tcb[taskCurrent].state = STATE_STOPPED;
+            freeToHeap(tcb[taskCurrent].spInit);
+            NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;       // task is stopped, start other
+        }
+        break;
+    case WAIT:
+        if (r0 >= MAX_SEMAPHORES)                // accessing non-existing semaphore, exit
+            break;
+        if (semaphores[r0].count > 0)
+            semaphores[r0].count--;
+        else
+        {
+            if (semaphores[r0].queueSize < MAX_SEMAPHORE_QUEUE_SIZE)
+            {
+                tcb[taskCurrent].semaphore = r0;                            // store which semaphore blocked the task
+                tcb[taskCurrent].state = STATE_BLOCKED_SEMAPHORE;           // stop task until resource is available
+                // put task in queue, and update queue
+                semaphores[r0].processQueue[semaphores[r0].queueSize++] = taskCurrent;
+            }
+            NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;       // task is stopped, start other
+        }
+        break;
+    case POST:
+        // the value of R0, defines which semaphore is being used - always be 0
+        if (r0 >= MAX_SEMAPHORES)                  // accessing non-exist resource
+            break;
+        semaphores[r0].count++;                    // free shared access
+
+        if (semaphores[r0].queueSize > 0)      // if any task in queue for resource, then give it access
+        {
+            uint8_t i, nextTaskId = semaphores[r0].processQueue[0];
+            semaphores[r0].count--;
+            semaphores[r0].queueSize--;
+            tcb[nextTaskId].state = STATE_READY;
+            for (i = 0; i < semaphores[r0].queueSize; i++)     // update the queue, shift the task down by 1 index
+                semaphores[r0].processQueue[i] = semaphores[r0].processQueue[i + 1];
+        }
+       break;
     }
+
     __asm(" POP {LR}");
 
 /** next cmd is a problem because, GCC PUSH register(s) on fnc calls

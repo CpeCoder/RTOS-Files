@@ -57,9 +57,6 @@ int main(void)
     setupSramAccess();
     initRtos();
 
-    // Setup UART0 baud rate
-    setUart0BaudRate(115200, 40e6);
-
     // Initialize mutexes and semaphores
     initMutex(resource);
     initSemaphore(keyPressed, 1);
@@ -70,15 +67,15 @@ int main(void)
     ok =  createThread(idle, "Idle", 15, 512);
 
     // Add other processes
-    //ok &= createThread(lengthyFn, "LengthyFn", 12, 1024);
+    ok &= createThread(lengthyFn, "LengthyFn", 12, 1024);
     ok &= createThread(flash4Hz, "Flash4Hz", 8, 512);
-    ok &= createThread(oneshot, "OneShot", 4, 1536);
+    ok &= createThread(oneshot, "OneShot", 8, 1536);
     //ok &= createThread(readKeys, "ReadKeys", 12, 1024);
     //ok &= createThread(debounce, "Debounce", 12, 1024);
     ok &= createThread(important, "Important", 0, 1024);
     //ok &= createThread(uncooperative, "Uncoop", 12, 1024);
     //ok &= createThread(errant, "Errant", 12, 512);
-    ok &= createThread(shell, "Shell", 12, 4096);
+    //ok &= createThread(shell, "Shell", 12, 4096);
 
     // TODO: Add code to implement a periodic timer and ISR
     // Enable clocks

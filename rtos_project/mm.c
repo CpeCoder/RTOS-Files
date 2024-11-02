@@ -132,7 +132,7 @@ void * mallocFromHeap(uint32_t size_in_bytes)
         uint16_t subregionAddr, regionAddr;
         getMallocAddr(&subregionAddr, &regionAddr, allocatedIndex);
         addrPtr = (void*)(HEAP_ADDRESS + regionAddr + subregionAddr);
-        addAllocation(totalSpaceNeeded * 512, addrPtr);
+        addAllocation(totalSpaceNeeded * 512, addrPtr+size_in_bytes);   // store stack top
         return addrPtr;
     }
     else    // sizeInBytes = 0
@@ -146,21 +146,21 @@ void freeToHeap(void *pMemory)
     uint8_t* inUse1024 = (uint8_t*)(&subregionUseData) + 6; // 55:48 of inUse blocks
     uint8_t* inUse512  = (uint8_t*)(&subregionUseData) + 5; // 47:40 of inUse blocks
 
-    uint32_t baseAddrValue = (uint32_t)(pMemory);
+    uint32_t baseAddrValue = (uint32_t)(pMemory) - 1;
     uint16_t startSubregionSize, endSubregionSize;
-    uint8_t i, startIndex = calculateIndex(&baseAddrValue, &startSubregionSize);
-    startIndex -= 8;    // heap don't include OS kernel
-
+    uint8_t endIndex = calculateIndex(baseAddrValue, &endSubregionSize);
+    uint8_t i, startIndex;
     for(i = 0; i < MAX_ALLOCATION; i++)
     {
         if (allocatedData[i].heapAddr == pMemory)
             break;
     }
 
-    baseAddrValue += allocatedData[i].size - 1;
+    baseAddrValue -= allocatedData[i].size + 1;     // subtracted 1 before from base address
+    startIndex = calculateIndex(&baseAddrValue, &startSubregionSize);
     // need to the correct sub-region size by sending in region address
-    uint8_t endIndex = calculateIndex(&baseAddrValue, &endSubregionSize);
-    endIndex -= 8 - 1;      // need to include for bit shifts
+    endIndex -= 8 - 1;      // need to include last sub-region for bit shifts
+    startIndex -= 8;        // heap don't include OS kernel
     subregionUseData &= ~((((uint64_t)1 << (endIndex - startIndex)) - 1) << startIndex);
 
     // change inUse blocks
