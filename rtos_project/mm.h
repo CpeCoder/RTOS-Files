@@ -11,11 +11,24 @@
 #ifndef MM_H_
 #define MM_H_
 
-#define NUM_SRAM_REGIONS 4
+#include  <stdbool.h>
 
+#define NUM_SRAM_REGIONS 4
+#define MAX_MEMORY_ALLOCATION 15
 //-----------------------------------------------------------------------------
 // Subroutines
 //-----------------------------------------------------------------------------
+
+// data of allocated task
+typedef struct _MALLOC_DATA
+{
+    bool inUse;
+    uint32_t size;
+    void* fnPid;
+    void* heapAddr;
+} MALLOC_DATA;
+
+MALLOC_DATA allocatedData[MAX_MEMORY_ALLOCATION];
 
 void * mallocFromHeap(uint32_t size_in_bytes);
 void freeToHeap(void *pMemory);
@@ -26,5 +39,6 @@ void setupSramAccess(void);
 uint64_t createNoSramAccessMask(void);
 void addSramAccessWindow(uint64_t *srdBitMask, uint32_t *baseAdd, uint32_t size_in_bytes);
 void applySramAccessMask(uint64_t srdBitMask);
+uint32_t getFreeSpace();
 
 #endif

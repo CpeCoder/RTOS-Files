@@ -26,4 +26,5 @@ extern void* runFn(void* sp, void* pc);
 extern void restoreRegs();
 extern void* storeRegs();
 extern void setExecpLr();
+extern uint32_t reg0();
 #endif

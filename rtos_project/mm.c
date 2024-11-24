@@ -24,10 +24,11 @@ void calculateBlockRequired(uint32_t requestedSize, uint8_t* blockCount1024, uin
 bool findConsecutiveSpace(uint8_t* allocatedIndex, uint8_t* needed1024Blocks, uint8_t* needed512Blocks);
 void getMallocAddr(uint16_t* subregion, uint16_t* region, uint8_t allocatedIndex);
 uint8_t calculateIndex(uint32_t* baseAddrValue, uint16_t* subregionSize);
-void addAllocation(uint32_t size, void* heapAddr);
+void addAllocation(uint32_t size, void* heapAddr, void* pid);
 
 // Design specific data
 #define HEAP_ADDRESS 0x20001000     // base address for tasks space 28KB
+#define TOTAL_SPACE 28672
 #define MAX_1536B_BLOCK 3
 #define MAX_1024B_BLOCK 16
 #define MAX_512B_BLOCK 24
@@ -40,17 +41,7 @@ void addAllocation(uint32_t size, void* heapAddr);
 //  39:0 - each bit (0 - not in use, 1 - in use) represents a respected sub-region (0 being region at base addr)
 // **************************************************************************************************************
 uint64_t subregionUseData = 0;
-
-// data of allocated task
-typedef struct _MALLOC_DATA
-{
-    bool inUse;
-//    uint32_t pid;
-    uint32_t size;
-    void* heapAddr;
-} MALLOC_DATA;
-
-MALLOC_DATA allocatedData[12] = {0};
+uint16_t usedSpace = 0;
 
 // REQUIRED: add your malloc code here and update the SRD bits for the current thread
 void * mallocFromHeap(uint32_t size_in_bytes)
@@ -132,7 +123,7 @@ void * mallocFromHeap(uint32_t size_in_bytes)
         uint16_t subregionAddr, regionAddr;
         getMallocAddr(&subregionAddr, &regionAddr, allocatedIndex);
         addrPtr = (void*)(HEAP_ADDRESS + regionAddr + subregionAddr);
-        addAllocation(totalSpaceNeeded * 512, addrPtr+size_in_bytes);   // store stack top
+        addAllocation(totalSpaceNeeded * 512, (void*)((uint32_t)addrPtr+size_in_bytes), (void*)0x20008000);   // store stack top
         return addrPtr;
     }
     else    // sizeInBytes = 0
@@ -146,21 +137,21 @@ void freeToHeap(void *pMemory)
     uint8_t* inUse1024 = (uint8_t*)(&subregionUseData) + 6; // 55:48 of inUse blocks
     uint8_t* inUse512  = (uint8_t*)(&subregionUseData) + 5; // 47:40 of inUse blocks
 
-    uint32_t baseAddrValue = (uint32_t)(pMemory) - 1;
-    uint16_t startSubregionSize, endSubregionSize;
-    uint8_t endIndex = calculateIndex(baseAddrValue, &endSubregionSize);
-    uint8_t i, startIndex;
+    uint8_t i;
     for(i = 0; i < MAX_ALLOCATION; i++)
     {
         if (allocatedData[i].heapAddr == pMemory)
             break;
     }
-
-    baseAddrValue -= allocatedData[i].size + 1;     // subtracted 1 before from base address
-    startIndex = calculateIndex(&baseAddrValue, &startSubregionSize);
+    uint32_t sizeInBytes = allocatedData[i].size;
+    uint32_t baseAddrValue = (uint32_t)pMemory - sizeInBytes;
+    uint16_t startSubregionSize, endSubregionSize;
+    uint8_t startIndex = calculateIndex(&baseAddrValue, &startSubregionSize);
+    startIndex -= 8;    // heap don't include OS kernel
+    baseAddrValue += sizeInBytes - 1;
     // need to the correct sub-region size by sending in region address
-    endIndex -= 8 - 1;      // need to include last sub-region for bit shifts
-    startIndex -= 8;        // heap don't include OS kernel
+    uint8_t endIndex = calculateIndex(&baseAddrValue, &endSubregionSize);
+    endIndex -= 8 - 1;      // need to include for bit shifts
     subregionUseData &= ~((((uint64_t)1 << (endIndex - startIndex)) - 1) << startIndex);
 
     // change inUse blocks
@@ -171,7 +162,8 @@ void freeToHeap(void *pMemory)
         *inUse1536 -= 1;
     }
     else
-        *(startSubregionSize == 512 ? inUse512 : inUse1024) -= allocatedData[i].size / startSubregionSize;
+        *(startSubregionSize == 512 ? inUse512 : inUse1024) -= sizeInBytes / startSubregionSize;
+    usedSpace -= sizeInBytes;
 }
 
 // REQUIRED: include your solution from the mini project
@@ -203,7 +195,7 @@ void allowPeripheralAccess(void)
 
 void setupSramAccess(void)
 {
-    // 4KB OS Kernel
+/*    // 4KB OS Kernel, takes background region config (+r+w+x privilege, -r-w-x user)
     // set region number (0 - 7)
     NVIC_MPU_NUMBER_R = 0x2;
     // set region base address (N=log2(Size)) and let it use MPUNUMBER (0<<4)
@@ -212,7 +204,7 @@ void setupSramAccess(void)
     // set region to allow processor to fetch in exception, +r+w user,
         // (tex-s-c-b) see pg.130, all sub-regions enable, size encoding pg.92 (N-1), enable the region
     NVIC_MPU_ATTR_R = (0 << 28) | (0b011 << 24) | (0b000 << 19) | (1 << 18) | (1 << 17) | (0 << 16) |
-                        (0xFF << 8) | (0xB << 1) | NVIC_MPU_ATTR_ENABLE;
+                        (0xFF << 8) | (0xB << 1) | NVIC_MPU_ATTR_ENABLE;*/
 
     // Heap for threads
     // set region number (0 - 7)
@@ -536,7 +528,7 @@ uint8_t calculateIndex(uint32_t* baseAddrValue, uint16_t* subregionSize)
     return index;
 }
 
-void addAllocation(uint32_t size, void* heapAddr)       // uint32_t pid removed
+void addAllocation(uint32_t size, void* heapAddr, void* pid)
 {
     uint8_t i;
     for(i = 0; i < 12; i++)
@@ -544,10 +536,16 @@ void addAllocation(uint32_t size, void* heapAddr)       // uint32_t pid removed
         if(!allocatedData[i].inUse)
         {
             allocatedData[i].inUse = 1;
-            //allocatedData[i].pid = pid;
+            allocatedData[i].fnPid = pid;
             allocatedData[i].size = size;
             allocatedData[i].heapAddr = heapAddr;
+            usedSpace += size;
             return;
         }
     }
+}
+
+uint32_t getFreeSpace()
+{
+    return (TOTAL_SPACE - usedSpace);
 }

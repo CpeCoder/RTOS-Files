@@ -37,6 +37,9 @@ typedef void (*_fn)();
 #define keyReleased 1
 #define flashReq 2
 
+// MAX char in name
+#define NAME_SIZE 25
+
 // tasks
 #define MAX_TASKS 12
 
@@ -54,6 +57,7 @@ bool createThread(_fn fn, const char name[], uint8_t priority, uint32_t stackByt
 void restartThread(_fn fn);
 void stopThread(_fn fn);
 void setThreadPriority(_fn fn, uint8_t priority);
+void mallocRequest(uint32_t size, void** address);
 
 void yield(void);
 void sleep(uint32_t tick);

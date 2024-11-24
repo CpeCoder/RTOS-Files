@@ -26,6 +26,7 @@
    .def restoreRegs
    .def storeRegs
    .def setExecpLr
+   .def reg0
 
 ;-----------------------------------------------------------------------------
 ; Register values and large immediate values
@@ -112,17 +113,15 @@ runFn:
 ;	STR R0, [R1]					; store address (R0) points to last R11 pushed
 
 restoreRegs:
-	PUSH {LR}				; need this function to return updated sp, so can not BX 0xFFFFFFFD
 	MRS R0, PSP				; gets stack continous address
 	LDM R0!, {LR,R4-R11}	; load reglist to R0 address, increment after and writes back the updated address
 	MSR PSP, R0				; update the stack after POP (LDR)
-	POP {LR}				; restore LR value
 	BX LR
 
 storeRegs:
 	PUSH {LR}						; store way-back address
 	MRS R0, PSP						; gets stack continous address
-	LDR LR, execResultValue			; load LR with execute_result of thread PSP value
+	MOV LR, R1						; load LR with execute_result of thread PSP value
 	STMDB R0!, {LR,R4-R11}			; stores reglist to R0 address, decrements first and writes back the updated address
 	MSR PSP, R0						; sets stack continous address
 	POP {LR}						; restore LR value
@@ -130,4 +129,7 @@ storeRegs:
 
 setExecpLr:
 	LDR LR, execResultValue			; load LR with execute_result of thread PSP valu/e
+	BX LR
+
+reg0:
 	BX LR

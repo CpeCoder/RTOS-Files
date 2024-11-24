@@ -13,23 +13,26 @@
 //-----------------------------------------------------------------------------
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "tm4c123gh6pm.h"
 #include "shell.h"
 #include "c_fnc.h"
 #include "uart0.h"
 #include "kernel.h"
+#include "asm_src.h"
 
 // REQUIRED: Add header files here for your strings functions, ...
 // data from UI
-#define MAX_CHARS 80
-#define MAX_FIELDS 5
+#define MAX_CHARS   80
+#define MAX_FIELDS  5
+#define MAX_PS_DATA 15
 
 typedef struct _USER_DATA
 {
-    char buffer[MAX_CHARS+1];
+    char    buffer[MAX_CHARS+1];
     uint8_t fieldCount;
     uint8_t fieldPosition[MAX_FIELDS];
-    char fieldType[MAX_FIELDS];
+    char    fieldType[MAX_FIELDS];
 } USER_DATA;
 
 //-----------------------------------------------------------------------------
@@ -42,11 +45,12 @@ void preempt(bool on);
 void pi(bool on);
 void kill(uint32_t pid);
 void ipcs(void);
-void ps(void);
+void ps(PS_DATA* psInfo);
 bool isCommand(USER_DATA* data, const char strCommand[], uint8_t minArguments);
 int32_t getFieldInteger(USER_DATA* data, uint8_t fieldNumber);
 char* getFieldString(USER_DATA* data, uint8_t fieldNumber);
 void parseFields(USER_DATA* data);
+void resetTask(char taskName[]);
 
 // REQUIRED: add processing for the shell commands through the UART here
 void shell(void)
@@ -55,7 +59,9 @@ void shell(void)
     bool end;
     uint8_t count = 0;
     USER_DATA data;
+    PS_DATA psInfo[MAX_PS_DATA];
 
+    putsUart0("\nuser@rtos:~$ ");
     while(true)
     {
         if(kbhitUart0())        // if UART FIFO is full
@@ -80,35 +86,11 @@ void shell(void)
                 parseFields(&data);
                 if(isCommand(&data, "reboot", 0))
                 {
-                    NVIC_APINT_R = NVIC_APINT_VECTKEY | NVIC_APINT_SYSRESETREQ;
+                    __asm(" SVC #16");
                 }
-/*                else if(isCommand(&data, "malloc", 1))
-                {
-                    uint32_t size = getFieldInteger(&data, 1);
-                    uint32_t addr = (uint32_t) malloc_from_heap(size);
-                    char addrStr[10];
-                    uint32ToHexString(&addr, addrStr);
-                    putsUart0(addrStr);
-                    putcUart0('\n');
-                }
-                else if(isCommand(&data, "free", 1))
-                {
-                    uint32_t* addr = (uint32_t*)hexStringToUint32(getFieldString(&data, 1));
-                    uint32_t size;
-                    bool ok = 0;
-                    ok = checkOwnership(addr, &size, 0);
-                    if(ok)
-                    {
-                        freeFromHeap(addr, size);
-                    }
-                    else
-                    {
-                        putsUart0("You THIEF!\n");
-                    }
-                }*/
                 else if(isCommand(&data, "ps", 0))
                 {
-                    ps();
+                    ps(psInfo);
                 }
                 else if(isCommand(&data, "ipcs", 0))
                 {
@@ -116,7 +98,7 @@ void shell(void)
                 }
                 else if(isCommand(&data, "kill", 1))
                 {
-                    uint32_t pid = getFieldInteger(&data, 1);
+                    uint32_t pid = hexStringToUint32(getFieldString(&data, 1));
                     kill(pid);
                 }
                 else if(isCommand(&data, "pkill", 1))
@@ -142,26 +124,30 @@ void shell(void)
                 {
                     pidof(getFieldString(&data, 1));
                 }
+                else if(isCommand(&data, "meminfo", 0))
+                {
+                    __asm(" SVC #15");
+                }
                 else
                 {
-                    char procArr[2][10] = {"idle", "flash4hz"};
-                    uint8_t i = 0;
-                    for(i = 0; i < 2; i++)
-                    {
-                        if(isCommand(&data, procArr[i], 0))
-                        {
-                            //
-                        }
-                    }
+                    resetTask(getFieldString(&data, 0));
                 }
+                putsUart0("\nuser@rtos:~$ ");
             }
         }
-        yield();
+        else
+            yield();
     }
+}
+
+void resetTask(char taskName[])
+{
+    __asm(" SVC #18");
 }
 
 void pkill(char str[])
 {
+    __asm(" SVC #10");
     putsUart0((char*)str);
     putsUart0(" killed");
     putcUart0('\n');
@@ -169,27 +155,33 @@ void pkill(char str[])
 
 void pidof(char name[])
 {
+    __asm(" SVC #11");
+    uint32_t pid = reg0();
+    char pidStr[20];
     putsUart0((char*)name);
-    putsUart0(" launched");
-    putcUart0('\n');
+    putsUart0(" pid value: ");
+    putsUart0(uint32ToHexString(&pid, pidStr));
+    putsUart0("\n\n");
 }
 
 void sched(bool prio_on)
 {
+    __asm(" SVC #12");
     if(prio_on)
     {
-        putsUart0("sched prio");
+        putsUart0("prio on");
         putcUart0('\n');
     }
     else
     {
-        putsUart0("sched rr");
+        putsUart0("prio off");
         putcUart0('\n');
     }
 }
 
 void preempt(bool on)
 {
+    __asm(" SVC #13");
     if(on)
     {
         putsUart0("preempt on");
@@ -204,6 +196,7 @@ void preempt(bool on)
 
 void pi(bool on)
 {
+    __asm(" SVC #14");
     if(on)
     {
         putsUart0("pi on");
@@ -218,23 +211,39 @@ void pi(bool on)
 
 void kill(uint32_t pid)
 {
-    char pidStr[MAX_CHARS+1];
+    __asm(" SVC #9");
+    char pidStr[20];
     numToStr(pid, pidStr);
     putsUart0(pidStr);
-    putsUart0(" killed");
-    putcUart0('\n');
+    putsUart0(" killed\n");
 }
 
 void ipcs(void)
 {
-    putsUart0("IPCS called");
+    __asm(" SVC #8");
+    //putsUart0("IPCS called");
     putcUart0('\n');
 }
 
-void ps(void)
+void ps(PS_DATA* psInfo)
 {
-    putsUart0("PS called");
-    putcUart0('\n');
+    __asm(" SVC #20");
+    putsUart0("\n  TASK   \tCPU %   \tMEMORY   \tSTATE      \t\tMUTEX   \tSEMAPHORE\n");
+    putsUart0("----------------------------------------------------------------------------------------------------\n");
+    char data[NAME_SIZE];
+    uint8_t i;
+    for (i = 0; i < MAX_PS_DATA; i++)
+    {
+        if (psInfo[i].isData == true)
+        {
+            putsUart0(psInfo[i].taskName); putsUart0("    \t"); putsUart0(numToStr(psInfo[i].cpuPercent / 100, data));
+            putcUart0('.'); putsUart0(numToStr(psInfo[i].cpuPercent % 100, data)); putsUart0("      \t");
+            putsUart0(numToStr(psInfo[i].memory, data)); putsUart0("B    \t"); putsUart0(psInfo[i].state); putsUart0(" \t");
+            putsUart0(psInfo[i].mutex); putsUart0("    \t"); putsUart0(psInfo[i].semaphore); putcUart0('\n');
+        }
+        else
+            break;
+    }
 }
 
 /**

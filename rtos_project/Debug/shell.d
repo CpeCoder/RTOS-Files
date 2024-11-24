@@ -11,14 +11,15 @@ shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/includ
 shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/machine/_types.h
 shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/machine/_stdint.h
 shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/sys/_stdint.h
+shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdbool.h
 shell.obj: ../tm4c123gh6pm.h
 shell.obj: ../shell.h
+shell.obj: ../kernel.h
 shell.obj: ../c_fnc.h
-shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdbool.h
 shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdio.h
 shell.obj: /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdarg.h
 shell.obj: ../uart0.h
-shell.obj: ../kernel.h
+shell.obj: ../asm_src.h
 
 ../shell.c:
 
@@ -42,13 +43,15 @@ shell.obj: ../kernel.h
 
 /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/sys/_stdint.h:
 
+/home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdbool.h:
+
 ../tm4c123gh6pm.h:
 
 ../shell.h:
 
-../c_fnc.h:
+../kernel.h:
 
-/home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdbool.h:
+../c_fnc.h:
 
 /home/deep/ti/ccs1240/ccs/tools/compiler/ti-cgt-arm_20.2.7.LTS/include/stdio.h:
 
@@ -56,5 +59,5 @@ shell.obj: ../kernel.h
 
 ../uart0.h:
 
-../kernel.h:
+../asm_src.h:
 

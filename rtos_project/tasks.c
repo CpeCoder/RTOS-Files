@@ -78,12 +78,6 @@ void initHw(void)
     // enable usage, bus, and memory management faults
     NVIC_CFG_CTRL_R |= NVIC_CFG_CTRL_DIV0;
     NVIC_SYS_HND_CTRL_R |= NVIC_SYS_HND_CTRL_USAGE | NVIC_SYS_HND_CTRL_BUS | NVIC_SYS_HND_CTRL_MEM;
-
-    // setup system timer
-    NVIC_ST_RELOAD_R  = 40e3 - 1;   // sysTick will 1 millisecond muti-shot timer
-    NVIC_ST_CURRENT_R = 0;          // W1C register, NOTE: current and reload are only 24 bit
-    // user system clock, enable interrupt, enable muti-shot (keeps reloading)
-    NVIC_ST_CTRL_R    = NVIC_ST_CTRL_CLK_SRC | NVIC_ST_CTRL_INTEN | NVIC_ST_CTRL_ENABLE;
 }
 
 // REQUIRED: add code to return a value from 0-63 indicating which of 6 PBs are pressed
@@ -92,10 +86,10 @@ uint8_t readPbs(void)
     uint8_t pbValue = 0x00;   // none pressed
     if (!getPinValue(PORTC, 4)) pbValue |= 0x01;
     if (!getPinValue(PORTC, 5)) pbValue |= 0x02;
-    if (!getPinValue(PORTC, 6)) pbValue |= 0x03;
-    if (!getPinValue(PORTC, 7)) pbValue |= 0x04;
-    if (!getPinValue(PORTD, 6)) pbValue |= 0x05;
-    if (!getPinValue(PORTD, 7)) pbValue |= 0x06;
+    if (!getPinValue(PORTC, 6)) pbValue |= 0x04;
+    if (!getPinValue(PORTC, 7)) pbValue |= 0x08;
+    if (!getPinValue(PORTD, 6)) pbValue |= 0x10;
+    if (!getPinValue(PORTD, 7)) pbValue |= 0x20;
 
     return pbValue;
 }
@@ -109,6 +103,17 @@ void idle(void)
         setPinValue(ORANGE_LED, 1);
         waitMicrosecond(1000);
         setPinValue(ORANGE_LED, 0);
+        yield();
+    }
+}
+
+void idleDos(void)
+{
+    while(true)
+    {
+        setPinValue(GREEN_LED, 1);
+        waitMicrosecond(1000);
+        setPinValue(GREEN_LED, 0);
         yield();
     }
 }
@@ -144,8 +149,9 @@ void partOfLengthyFn(void)
 void lengthyFn(void)
 {
     uint16_t i;
-    uint8_t *mem;
-    mem = mallocFromHeap(5000 * sizeof(uint8_t));
+    uint8_t* mem;
+    mallocRequest(5000, (void**)&mem);
+    //mem = mallocFromHeap(5000 * sizeof(uint8_t));
     while(true)
     {
         lock(resource);

@@ -29,6 +29,8 @@
 // Device includes, defines, and assembler directives
 //-----------------------------------------------------------------------------
 
+// Task switching takes 792 clocks = 19.8 us
+
 #include "tm4c123gh6pm.h"
 #include "clock.h"
 #include "gpio.h"
@@ -65,17 +67,16 @@ int main(void)
 
     // Add required idle process at lowest priority
     ok =  createThread(idle, "Idle", 15, 512);
-
     // Add other processes
     ok &= createThread(lengthyFn, "LengthyFn", 12, 1024);
     ok &= createThread(flash4Hz, "Flash4Hz", 8, 512);
-    ok &= createThread(oneshot, "OneShot", 8, 1536);
-    //ok &= createThread(readKeys, "ReadKeys", 12, 1024);
-    //ok &= createThread(debounce, "Debounce", 12, 1024);
+    ok &= createThread(oneshot, "OneShot", 4, 1536);
+    ok &= createThread(readKeys, "ReadKeys", 12, 1024);
+    ok &= createThread(debounce, "Debounce", 12, 1024);
     ok &= createThread(important, "Important", 0, 1024);
-    //ok &= createThread(uncooperative, "Uncoop", 12, 1024);
-    //ok &= createThread(errant, "Errant", 12, 512);
-    //ok &= createThread(shell, "Shell", 12, 4096);
+    ok &= createThread(uncooperative, "Uncoop", 12, 1024);
+    ok &= createThread(errant, "Errant", 12, 512);
+    ok &= createThread(shell, "Shell", 12, 4096);
 
     // TODO: Add code to implement a periodic timer and ISR
     // Enable clocks

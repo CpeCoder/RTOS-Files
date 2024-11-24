@@ -10,7 +10,12 @@ bool strCmp(const char str1[], const char str2[])
 
     while(str1[i] || str2[i])
     {
-        if(str1[i] != str2[i])
+        char s1 = str1[i], s2 = str2[i];
+        if (s1 >= 'A' && s1 <= 'Z')         // make strCmp case insensitive
+            s1 += 32;
+        if (s2 >= 'A' && s2 <= 'Z')
+            s2 += 32;
+        if(s1 != s2)
         {
             return false;
         }
