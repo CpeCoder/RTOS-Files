@@ -1,2 +1,2 @@
 # RTOS-Files
-Class Documents
+Navigate to the Submission directory for all information/content.
